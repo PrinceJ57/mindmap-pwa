@@ -1,3 +1,4 @@
+// src/pages/Login.tsx
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 
@@ -10,10 +11,13 @@ export default function Login() {
       setError(null)
       setLoading(true)
 
+      // Prefer a stable production URL so preview deploys don’t redirect back to dead URLs.
+      const SITE_URL = (import.meta.env.VITE_SITE_URL as string | undefined) || window.location.origin
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/capture`,
+          redirectTo: `${SITE_URL}/capture`,
         },
       })
 
