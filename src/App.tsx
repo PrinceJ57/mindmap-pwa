@@ -12,18 +12,18 @@ export default function App() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }: { data: { session: Session | null } }) => {
-      setSignedIn(!!data.session)
-      setLoading(false)
-    })
+  supabase.auth.getSession().then((res: { data: { session: Session | null } }) => {
+    setSignedIn(!!res.data.session)
+    setLoading(false)
+  })
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
-      setSignedIn(!!session)
-      setLoading(false)
-    })
+  const { data: sub } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
+    setSignedIn(!!session)
+    setLoading(false)
+  })
 
-    return () => sub.subscription.unsubscribe()
-  }, [])
+  return () => sub.subscription.unsubscribe()
+}, [])
 
   async function signOut() {
     await supabase.auth.signOut()
