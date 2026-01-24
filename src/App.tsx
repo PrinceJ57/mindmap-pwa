@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
+import type { Session } from '@supabase/supabase-js'
 import Login from './pages/Login'
 import Capture from './pages/Capture'
 import Search from './pages/Search'
@@ -11,12 +12,12 @@ export default function App() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(({ data }: { data: { session: Session | null } }) => {
       setSignedIn(!!data.session)
       setLoading(false)
     })
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
       setSignedIn(!!session)
       setLoading(false)
     })
@@ -50,4 +51,9 @@ export default function App() {
     </div>
   )
 }
+
+
+
+
+
 
