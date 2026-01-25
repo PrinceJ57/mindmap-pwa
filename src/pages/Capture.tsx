@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
+import TagInput from '../components/TagInput'
 import { supabase } from '../supabaseClient'
 
 type NodeType = 'idea' | 'task'
@@ -8,15 +9,10 @@ export default function Capture() {
   const [type, setType] = useState<NodeType>('idea')
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
-  const [tagsRaw, setTagsRaw] = useState('')
+  const [tags, setTags] = useState<string[]>([])
   const [context, setContext] = useState('')
   const [energy, setEnergy] = useState<Energy>('medium')
   const [durationMinutes, setDurationMinutes] = useState<number | ''>('')
-
-  const tags = useMemo(
-    () => tagsRaw.split(',').map(t => t.trim().toLowerCase()).filter(Boolean),
-    [tagsRaw]
-  )
 
   async function save() {
     const session = (await supabase.auth.getSession()).data.session
@@ -61,7 +57,7 @@ export default function Capture() {
 
     setTitle('')
     setBody('')
-    setTagsRaw('')
+    setTags([])
     setContext('')
     setDurationMinutes('')
     alert('Saved ✅')
@@ -91,18 +87,13 @@ export default function Capture() {
         style={{ width: '100%', padding: 12, fontSize: 16, marginBottom: 12 }}
       />
 
-      <input
-        value={tagsRaw}
-        onChange={(e) => setTagsRaw(e.target.value)}
-        placeholder="tags (comma-separated)"
-        style={{ width: '100%', padding: 12, fontSize: 16, marginBottom: 12 }}
-      />
+      <TagInput value={tags} onChange={setTags} placeholder="Add tags" />
 
       <input
         value={context}
         onChange={(e) => setContext(e.target.value)}
         placeholder="context (home/shop/computer/errands)"
-        style={{ width: '100%', padding: 12, fontSize: 16, marginBottom: 12 }}
+        style={{ width: '100%', padding: 12, fontSize: 16, marginTop: 12, marginBottom: 12 }}
       />
 
       {type === 'task' && (
@@ -116,7 +107,7 @@ export default function Capture() {
           />
           <select
             value={energy}
-            onChange={(e) => setEnergy(e.target.value as any)}
+            onChange={(e) => setEnergy(e.target.value as Energy)}
             style={{ width: '100%', padding: 12, fontSize: 16 }}
           >
             <option value="low">low energy</option>
