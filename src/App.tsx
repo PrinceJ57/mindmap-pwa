@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import type { Session } from '@supabase/supabase-js'
@@ -10,25 +10,60 @@ import Outline from './pages/Outline'
 import NodeDetail from './pages/NodeDetail'
 import Home from './pages/Home'
 import Review from './pages/Review'
+import { getQueueCount, onQueueUpdate, syncOfflineQueue } from './offlineQueue'
 
 export default function App() {
   const [loading, setLoading] = useState(true)
   const [signedIn, setSignedIn] = useState(false)
+  const [queueCount, setQueueCount] = useState(0)
+  const [syncing, setSyncing] = useState(false)
+  const syncingRef = useRef(false)
   const navigate = useNavigate()
 
   useEffect(() => {
-  supabase.auth.getSession().then((res: { data: { session: Session | null } }) => {
-    setSignedIn(!!res.data.session)
-    setLoading(false)
-  })
+    supabase.auth.getSession().then((res: { data: { session: Session | null } }) => {
+      setSignedIn(!!res.data.session)
+      setLoading(false)
+    })
 
-  const { data: sub } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
-    setSignedIn(!!session)
-    setLoading(false)
-  })
+    const { data: sub } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
+      setSignedIn(!!session)
+      setLoading(false)
+    })
 
-  return () => sub.subscription.unsubscribe()
-}, [])
+    return () => sub.subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    const update = () => setQueueCount(getQueueCount())
+    update()
+    return onQueueUpdate(update)
+  }, [])
+
+  const runSync = useCallback(async () => {
+    if (!signedIn) return
+    if (syncingRef.current) return
+    if (getQueueCount() === 0) return
+
+    syncingRef.current = true
+    setSyncing(true)
+    try {
+      await syncOfflineQueue({ supabase, maxItems: 3 })
+    } finally {
+      syncingRef.current = false
+      setSyncing(false)
+      setQueueCount(getQueueCount())
+    }
+  }, [signedIn])
+
+  useEffect(() => {
+    if (!signedIn) return
+    void runSync()
+    const interval = window.setInterval(() => {
+      void runSync()
+    }, 15000)
+    return () => window.clearInterval(interval)
+  }, [runSync, signedIn])
 
   async function signOut() {
     await supabase.auth.signOut()
@@ -40,14 +75,44 @@ export default function App() {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: 16 }}>
       {signedIn && (
-        <header style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
+        <header
+          style={{
+            display: 'flex',
+            gap: 12,
+            alignItems: 'center',
+            marginBottom: 16,
+            flexWrap: 'wrap',
+          }}
+        >
           <Link to="/home">Home</Link>
           <Link to="/capture">Capture</Link>
           <Link to="/search">Search</Link>
           <Link to="/board">Board</Link>
           <Link to="/outline">Outline</Link>
           <Link to="/review">Review</Link>
-          <button onClick={signOut} style={{ marginLeft: 'auto' }}>Sign out</button>
+
+          {queueCount > 0 && (
+            <span
+              aria-live="polite"
+              style={{
+                fontSize: 12,
+                padding: '4px 8px',
+                borderRadius: 999,
+                background: '#f1f1f1',
+              }}
+            >
+              Queued: {queueCount}
+            </span>
+          )}
+
+          <button
+            onClick={() => void runSync()}
+            disabled={syncing || queueCount === 0}
+            style={{ marginLeft: 'auto' }}
+          >
+            {syncing ? 'Syncing…' : 'Sync now'}
+          </button>
+          <button onClick={signOut}>Sign out</button>
         </header>
       )}
 
@@ -65,6 +130,3 @@ export default function App() {
     </div>
   )
 }
-
-
-

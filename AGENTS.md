@@ -25,6 +25,12 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
 - Added nodes metadata: `updated_at`, `pinned`, `review_after` + update trigger.
 - Added `saved_views` table with RLS + updated_at trigger.
 - Wired Home/Review routes + nav links; shared status constants + filter helpers.
+- Added offline capture queue with localStorage persistence and auto-sync retry.
+- Capture now queues failed saves (network/transient errors) and shows offline status.
+- Header shows queued count with a “Sync now” button for manual sync.
+
+## New goals created
+- (Optional) Add a `/queue` page to inspect queued items and retry/remove individually.
 
 ## Key implementation notes
 - Tag input UI lives in `src/components/TagInput.tsx`.

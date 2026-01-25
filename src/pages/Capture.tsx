@@ -1,9 +1,18 @@
 import { useState } from 'react'
 import TagInput from '../components/TagInput'
 import { supabase } from '../supabaseClient'
+import {
+  createNodeWithTags,
+  enqueuePayload,
+  errorToString,
+  shouldQueueError,
+  type Energy,
+  type NodeType,
+  type OfflinePayload,
+  type SaveNodeError,
+} from '../offlineQueue'
 
-type NodeType = 'idea' | 'task'
-type Energy = 'low' | 'medium' | 'high'
+type SaveMessage = { tone: 'success' | 'offline'; text: string }
 
 export default function Capture() {
   const [type, setType] = useState<NodeType>('idea')
@@ -13,54 +22,56 @@ export default function Capture() {
   const [context, setContext] = useState('')
   const [energy, setEnergy] = useState<Energy>('medium')
   const [durationMinutes, setDurationMinutes] = useState<number | ''>('')
+  const [saveMessage, setSaveMessage] = useState<SaveMessage | null>(null)
 
   async function save() {
+    setSaveMessage(null)
     const session = (await supabase.auth.getSession()).data.session
     if (!session) return alert('Not signed in.')
 
     if (!title.trim()) return alert('Title required.')
 
-    // 1) insert node
-    const { data: node, error: nodeErr } = await supabase
-      .from('nodes')
-      .insert({
-        owner_id: session.user.id,
-        type,
-        title: title.trim(),
-        body,
-        status: 'inbox',
-        context: context || null,
-        energy: type === 'task' ? energy : null,
-        duration_minutes: type === 'task' && durationMinutes !== '' ? durationMinutes : null,
-      })
-      .select('id')
-      .single()
-
-    if (nodeErr) return alert(nodeErr.message)
-
-    // 2) upsert tags + link
-    for (const name of tags) {
-      const { data: tag, error: tagErr } = await supabase
-        .from('tags')
-        .upsert({ owner_id: session.user.id, name }, { onConflict: 'owner_id,name' })
-        .select('id')
-        .single()
-
-      if (tagErr) return alert(tagErr.message)
-
-      const { error: linkErr } = await supabase
-        .from('node_tags')
-        .upsert({ node_id: node.id, tag_id: tag.id })
-
-      if (linkErr) return alert(linkErr.message)
+    const payload: OfflinePayload = {
+      type,
+      title: title.trim(),
+      body,
+      tags,
+      status: 'inbox',
+      context: context.trim() ? context.trim() : null,
+      energy: type === 'task' ? energy : null,
+      duration_minutes: type === 'task' && durationMinutes !== '' ? durationMinutes : null,
+      due_at: null,
     }
 
-    setTitle('')
-    setBody('')
-    setTags([])
-    setContext('')
-    setDurationMinutes('')
-    alert('Saved ✅')
+    try {
+      await createNodeWithTags({
+        supabase,
+        userId: session.user.id,
+        payload,
+        allowPartialTags: false,
+      })
+
+      setTitle('')
+      setBody('')
+      setTags([])
+      setContext('')
+      setDurationMinutes('')
+      setSaveMessage({ tone: 'success', text: 'Saved ✅' })
+    } catch (error) {
+      const saveError = error as SaveNodeError
+      const shouldQueue = saveError.stage !== 'tag' && shouldQueueError(saveError.original ?? saveError)
+      if (shouldQueue) {
+        enqueuePayload(payload, errorToString(saveError))
+        setTitle('')
+        setBody('')
+        setTags([])
+        setContext('')
+        setDurationMinutes('')
+        setSaveMessage({ tone: 'offline', text: 'Saved offline; will sync.' })
+        return
+      }
+      alert(errorToString(saveError))
+    }
   }
 
   return (
@@ -120,6 +131,22 @@ export default function Capture() {
       <button onClick={save} style={{ width: '100%', padding: 14, fontSize: 16 }}>
         Save
       </button>
+
+      {saveMessage && (
+        <div
+          role="status"
+          style={{
+            marginTop: 10,
+            padding: '8px 10px',
+            borderRadius: 6,
+            background: saveMessage.tone === 'offline' ? '#fff4d6' : '#e7f7ef',
+            color: '#1a1a1a',
+            fontSize: 14,
+          }}
+        >
+          {saveMessage.text}
+        </div>
+      )}
     </div>
   )
 }
