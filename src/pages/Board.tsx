@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import TagInput from '../components/TagInput'
 import TagChips from '../components/TagChips'
@@ -263,7 +264,9 @@ export default function Board() {
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                    <strong style={{ fontSize: 14 }}>{row.title}</strong>
+                    <Link to={`/node/${row.id}`} style={{ textDecoration: 'none', color: '#fff' }}>
+                      <strong style={{ fontSize: 14 }}>{row.title}</strong>
+                    </Link>
                     <span style={{ fontSize: 11, opacity: 0.7 }}>{row.type}</span>
                   </div>
                   {row.body && (

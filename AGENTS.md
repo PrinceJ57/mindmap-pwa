@@ -10,6 +10,7 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
 - Kanban board at `/board` with native HTML5 drag/drop between status columns.
 - Outline/table view at `/outline` with multi-select + bulk actions (status + tags).
 - Shared `list_nodes` RPC for owner-scoped listing with FTS + tag AND filters.
+- Node detail view with editable fields, tag editing, and links/backlinks.
 - Keep UI phone-first and minimal; no new dependencies.
 
 ## Goals achieved in this commit
@@ -17,6 +18,9 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
 - Added `/outline` table with multi-select, bulk status update, and bulk tag add.
 - Added `list_nodes` + `set_node_status` RPCs (owner-scoped) in SQL migration.
 - Added shared `TagChips` component; wired new routes in App header/nav.
+- Added `/node/:id` node detail page with edit/save + archive + tag sync.
+- Added edges table + RLS + RPCs for node detail and links/backlinks.
+- Linked Search/Board/Outline titles to node detail pages.
 
 ## Key implementation notes
 - Tag input UI lives in `src/components/TagInput.tsx`.
@@ -34,6 +38,10 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
   - Bulk tag add reuses `tags` + `node_tags` upserts across selected nodes.
   - File: `src/pages/Outline.tsx`.
 - Shared tag chip renderer: `src/components/TagChips.tsx`.
+- Node detail page: `src/pages/NodeDetail.tsx`.
+  - Editable title/body/type/status/tags + Save + Archive.
+  - Links section with outgoing/incoming backlinks + modal for linking.
+  - Uses RPCs `get_node_detail`, `get_node_links`, `create_edge`, `delete_edge`.
 
 ## Supabase / SQL
 - Migration file: `supabase/migrations/20260125_fts_search_nodes.sql`.
@@ -47,6 +55,10 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
   - Uses FTS (plainto_tsquery) or ILIKE fallback if `nodes.search` is null.
   - Enforces owner scope and AND tag filtering.
   - Adds RPC `public.set_node_status(node_id, new_status)` (owner-scoped).
+- Migration file: `supabase/migrations/20260125_edges_links.sql`.
+  - Creates `edges` table with uniqueness + no-self-link constraints.
+  - Adds RLS policies for owner-scoped select/insert/delete.
+  - Adds RPCs: `get_node_detail`, `get_node_links`, `create_edge`, `delete_edge`.
 
 ## How to apply SQL (Dashboard)
 1. Supabase Dashboard → SQL Editor → New query.
@@ -54,6 +66,8 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
 3. Run.
 4. Paste migration contents from `supabase/migrations/20260125_list_nodes.sql`.
 5. Run.
+6. Paste migration contents from `supabase/migrations/20260125_edges_links.sql`.
+7. Run.
 
 ## Conventions
 - Keep TypeScript strict; avoid `any` unless unavoidable.
@@ -68,4 +82,6 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
 - Search with text + tag filters; click tag chips to AND-filter.
 - Drag a node across statuses in Board; verify status persists after refresh.
 - Select multiple rows in Outline; bulk set status + bulk add tags.
+- Open any node from Search/Board/Outline and edit fields/tags.
+- Add a link from Node Detail; verify backlink shows on target.
 - `npm run build` should pass.

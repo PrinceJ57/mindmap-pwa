@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import TagInput from '../components/TagInput'
 import TagChips from '../components/TagChips'
@@ -390,7 +391,9 @@ export default function Outline() {
                 aria-label={`Select ${row.title}`}
               />
               <div style={{ display: 'grid', gap: 4 }}>
-                <strong style={{ fontSize: 14 }}>{row.title}</strong>
+                <Link to={`/node/${row.id}`} style={{ textDecoration: 'none', color: '#fff' }}>
+                  <strong style={{ fontSize: 14 }}>{row.title}</strong>
+                </Link>
                 {row.body && (
                   <span style={{ fontSize: 12, opacity: 0.7 }}>
                     {row.body.slice(0, 120)}{row.body.length > 120 ? '…' : ''}

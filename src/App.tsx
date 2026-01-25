@@ -7,6 +7,7 @@ import Capture from './pages/Capture'
 import Search from './pages/Search'
 import Board from './pages/Board'
 import Outline from './pages/Outline'
+import NodeDetail from './pages/NodeDetail'
 
 export default function App() {
   const [loading, setLoading] = useState(true)
@@ -52,12 +53,12 @@ export default function App() {
         <Route path="/search" element={signedIn ? <Search /> : <Navigate to="/login" />} />
         <Route path="/board" element={signedIn ? <Board /> : <Navigate to="/login" />} />
         <Route path="/outline" element={signedIn ? <Outline /> : <Navigate to="/login" />} />
+        <Route path="/node/:id" element={signedIn ? <NodeDetail /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to={signedIn ? "/capture" : "/login"} />} />
       </Routes>
     </div>
   )
 }
-
 
 
 

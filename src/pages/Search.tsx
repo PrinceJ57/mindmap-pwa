@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 
 type NodeRow = {
@@ -206,7 +207,9 @@ export default function Search() {
         {rows.map(r => (
           <div key={r.id} style={{ border: '1px solid #333', borderRadius: 10, padding: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <strong>{r.title}</strong>
+              <Link to={`/node/${r.id}`} style={{ textDecoration: 'none', color: '#fff' }}>
+                <strong>{r.title}</strong>
+              </Link>
               <span style={{ opacity: 0.8 }}>{r.type}</span>
             </div>
             {r.body && <p style={{ marginTop: 8, opacity: 0.9 }}>{r.body.slice(0, 180)}{r.body.length > 180 ? '…' : ''}</p>}
