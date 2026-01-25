@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import TagInput from '../components/TagInput'
 import TagChips from '../components/TagChips'
+import { STATUSES, type Status } from '../utils/status'
 
 type NodeRow = {
   id: number
@@ -15,10 +16,6 @@ type NodeRow = {
 }
 
 type TypeFilter = 'all' | 'idea' | 'task'
-
-const STATUSES = ['inbox', 'active', 'waiting', 'someday', 'done', 'archived'] as const
-
-type Status = typeof STATUSES[number]
 
 type DragPayload = {
   id: number

@@ -3,12 +3,9 @@ import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import TagInput from '../components/TagInput'
 import TagChips from '../components/TagChips'
+import { STATUSES, type Status } from '../utils/status'
 
 type NodeType = 'idea' | 'task'
-
-type Status = 'inbox' | 'active' | 'waiting' | 'someday' | 'done' | 'archived'
-
-const STATUSES: Status[] = ['inbox', 'active', 'waiting', 'someday', 'done', 'archived']
 
 const RELATIONS = ['related', 'supports', 'blocks', 'depends_on'] as const
 

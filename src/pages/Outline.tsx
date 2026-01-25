@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import TagInput from '../components/TagInput'
 import TagChips from '../components/TagChips'
+import { STATUSES, type Status } from '../utils/status'
+import {
+  areFiltersEqual,
+  filtersToSearchParams,
+  normalizeViewFilters,
+  parseFiltersFromSearchParams,
+  type ViewFilters,
+  type ViewSort,
+} from '../utils/viewFilters'
 
 type NodeRow = {
   id: number
@@ -11,14 +20,21 @@ type NodeRow = {
   body: string | null
   status: string
   created_at: string
+  updated_at?: string | null
+  pinned?: boolean | null
+  review_after?: string | null
   tags?: string[] | null
 }
 
 type TypeFilter = 'all' | 'idea' | 'task'
 
-const STATUSES = ['inbox', 'active', 'waiting', 'someday', 'done', 'archived'] as const
-
-type Status = typeof STATUSES[number]
+type SavedViewRow = {
+  id: number
+  name: string
+  filters: ViewFilters
+  created_at: string
+  updated_at: string
+}
 
 function normalizeTag(raw: string) {
   return raw.trim().toLowerCase()
@@ -30,10 +46,39 @@ function mergeTags(existing: string[] = [], incoming: string[]) {
   return Array.from(set)
 }
 
+function parseSavedViewFilters(raw: unknown): ViewFilters {
+  if (!raw || typeof raw !== 'object') {
+    return normalizeViewFilters({})
+  }
+  return normalizeViewFilters(raw as Partial<ViewFilters>)
+}
+
+function sortRows(rows: NodeRow[], sort: ViewSort) {
+  if (sort === 'relevance') return rows
+  const sorted = [...rows]
+  sorted.sort((a, b) => {
+    const aValue = sort === 'created'
+      ? new Date(a.created_at).getTime()
+      : new Date(a.updated_at ?? a.created_at).getTime()
+    const bValue = sort === 'created'
+      ? new Date(b.created_at).getTime()
+      : new Date(b.updated_at ?? b.created_at).getTime()
+    return bValue - aValue
+  })
+  return sorted
+}
+
 export default function Outline() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [filtersReady, setFiltersReady] = useState(false)
+
   const [q, setQ] = useState('')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<Status[]>([])
   const [tagFilter, setTagFilter] = useState<string[]>([])
+  const [pinnedOnly, setPinnedOnly] = useState(false)
+  const [sort, setSort] = useState<ViewSort>('updated')
+
   const [rows, setRows] = useState<NodeRow[]>([])
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -43,19 +88,68 @@ export default function Outline() {
   const [working, setWorking] = useState(false)
   const headerCheckboxRef = useRef<HTMLInputElement | null>(null)
 
+  const [savedViews, setSavedViews] = useState<SavedViewRow[]>([])
+  const [viewsLoading, setViewsLoading] = useState(false)
+  const [selectedViewId, setSelectedViewId] = useState<number | null>(null)
+
+  useEffect(() => {
+    const parsed = parseFiltersFromSearchParams(searchParams)
+    setQ(parsed.q ?? '')
+    setTypeFilter(parsed.type ?? 'all')
+    setStatusFilter(parsed.statuses ?? [])
+    setTagFilter(parsed.tags ?? [])
+    setPinnedOnly(!!parsed.pinnedOnly)
+    setSort(parsed.sort ?? 'updated')
+    setFiltersReady(true)
+  }, [searchParams])
+
+  const currentFilters = useMemo(() => (
+    normalizeViewFilters({
+      q: q.trim() ? q.trim() : null,
+      type: typeFilter === 'all' ? null : typeFilter,
+      statuses: statusFilter.length ? statusFilter : null,
+      tags: tagFilter.length ? tagFilter : null,
+      pinnedOnly: pinnedOnly ? true : null,
+      sort: sort ?? null,
+    })
+  ), [q, typeFilter, statusFilter, tagFilter, pinnedOnly, sort])
+
+  useEffect(() => {
+    if (!filtersReady) return
+    const nextParams = filtersToSearchParams(currentFilters)
+    if (nextParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true })
+    }
+  }, [currentFilters, searchParams, setSearchParams, filtersReady])
+
+  useEffect(() => {
+    if (!selectedViewId) return
+    const activeView = savedViews.find(view => view.id === selectedViewId)
+    if (!activeView) {
+      setSelectedViewId(null)
+      return
+    }
+    if (!areFiltersEqual(activeView.filters, currentFilters)) {
+      setSelectedViewId(null)
+    }
+  }, [currentFilters, savedViews, selectedViewId])
+
   useEffect(() => {
     let active = true
 
     async function run() {
+      if (!filtersReady) return
       setLoading(true)
       setErrorMessage(null)
 
       const { data, error } = await supabase.rpc('list_nodes', {
         lim: 200,
-        q: q.trim() ? q.trim() : null,
-        type_filter: typeFilter === 'all' ? null : typeFilter,
-        status_filter: null,
-        tag_filter: tagFilter.length ? tagFilter : null,
+        q: currentFilters.q,
+        type_filter: currentFilters.type,
+        status_filter: currentFilters.statuses,
+        tag_filter: currentFilters.tags,
+        pinned_only: currentFilters.pinnedOnly ?? false,
+        review_due_only: false,
       })
 
       if (!active) return
@@ -85,7 +179,42 @@ export default function Outline() {
 
     run()
     return () => { active = false }
-  }, [q, typeFilter, tagFilter])
+  }, [currentFilters, filtersReady])
+
+  useEffect(() => {
+    let active = true
+
+    async function loadViews() {
+      setViewsLoading(true)
+      const { data, error } = await supabase
+        .from('saved_views')
+        .select('id,name,filters,created_at,updated_at')
+        .order('name', { ascending: true })
+
+      if (!active) return
+      setViewsLoading(false)
+
+      if (error) {
+        return
+      }
+
+      const rows = (data ?? []).map(row => {
+        const rawFilters = (row as { filters?: unknown }).filters
+        return {
+          id: (row as { id: number }).id,
+          name: (row as { name: string }).name,
+          created_at: (row as { created_at: string }).created_at,
+          updated_at: (row as { updated_at: string }).updated_at,
+          filters: parseSavedViewFilters(rawFilters),
+        }
+      })
+
+      setSavedViews(rows)
+    }
+
+    loadViews()
+    return () => { active = false }
+  }, [])
 
   const allSelected = rows.length > 0 && rows.every(row => selectedIds.has(row.id))
   const selectedCount = selectedIds.size
@@ -111,6 +240,14 @@ export default function Outline() {
       return
     }
     setSelectedIds(new Set(rows.map(row => row.id)))
+  }
+
+  function toggleStatus(status: Status) {
+    setStatusFilter(prev => (
+      prev.includes(status)
+        ? prev.filter(item => item !== status)
+        : [...prev, status]
+    ))
   }
 
   function addTagFilter(raw: string) {
@@ -221,7 +358,127 @@ export default function Outline() {
     }
   }
 
-  const hasFilters = q.trim() !== '' || typeFilter !== 'all' || tagFilter.length > 0
+  async function handleSaveView() {
+    const name = window.prompt('Name this view')?.trim()
+    if (!name) return
+
+    const session = (await supabase.auth.getSession()).data.session
+    if (!session) {
+      alert('Not signed in.')
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('saved_views')
+      .insert({
+        owner_id: session.user.id,
+        name,
+        filters: currentFilters,
+      })
+      .select('id,name,filters,created_at,updated_at')
+      .single()
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    const view = {
+      id: (data as { id: number }).id,
+      name: (data as { name: string }).name,
+      created_at: (data as { created_at: string }).created_at,
+      updated_at: (data as { updated_at: string }).updated_at,
+      filters: parseSavedViewFilters((data as { filters?: unknown }).filters),
+    }
+
+    setSavedViews(prev => [...prev, view].sort((a, b) => a.name.localeCompare(b.name)))
+    setSelectedViewId(view.id)
+  }
+
+  function applyView(view: SavedViewRow) {
+    setQ(view.filters.q ?? '')
+    setTypeFilter(view.filters.type ?? 'all')
+    setStatusFilter(view.filters.statuses ?? [])
+    setTagFilter(view.filters.tags ?? [])
+    setPinnedOnly(!!view.filters.pinnedOnly)
+    setSort(view.filters.sort ?? 'updated')
+    setSelectedViewId(view.id)
+  }
+
+  async function handleRenameView(view: SavedViewRow) {
+    const name = window.prompt('Rename view', view.name)?.trim()
+    if (!name || name === view.name) return
+
+    const { data, error } = await supabase
+      .from('saved_views')
+      .update({ name })
+      .eq('id', view.id)
+      .select('id,name,filters,created_at,updated_at')
+      .single()
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setSavedViews(prev => prev.map(item => (
+      item.id === view.id
+        ? {
+          id: (data as { id: number }).id,
+          name: (data as { name: string }).name,
+          created_at: (data as { created_at: string }).created_at,
+          updated_at: (data as { updated_at: string }).updated_at,
+          filters: parseSavedViewFilters((data as { filters?: unknown }).filters),
+        }
+        : item
+    )).sort((a, b) => a.name.localeCompare(b.name)))
+  }
+
+  async function handleUpdateView(view: SavedViewRow) {
+    const { data, error } = await supabase
+      .from('saved_views')
+      .update({ filters: currentFilters })
+      .eq('id', view.id)
+      .select('id,name,filters,created_at,updated_at')
+      .single()
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setSavedViews(prev => prev.map(item => (
+      item.id === view.id
+        ? {
+          id: (data as { id: number }).id,
+          name: (data as { name: string }).name,
+          created_at: (data as { created_at: string }).created_at,
+          updated_at: (data as { updated_at: string }).updated_at,
+          filters: parseSavedViewFilters((data as { filters?: unknown }).filters),
+        }
+        : item
+    )))
+  }
+
+  async function handleDeleteView(view: SavedViewRow) {
+    if (!window.confirm(`Delete view "${view.name}"?`)) return
+
+    const { error } = await supabase
+      .from('saved_views')
+      .delete()
+      .eq('id', view.id)
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
+    setSavedViews(prev => prev.filter(item => item.id !== view.id))
+    if (selectedViewId === view.id) setSelectedViewId(null)
+  }
+
+  const hasFilters = currentFilters.q || currentFilters.type || (currentFilters.tags?.length ?? 0) > 0
+    || (currentFilters.statuses?.length ?? 0) > 0 || currentFilters.pinnedOnly
 
   const emptyState = !loading && rows.length === 0
 
@@ -236,6 +493,9 @@ export default function Outline() {
       return next
     })
   }, [rowsById])
+
+  const sortedRows = useMemo(() => sortRows(rows, sort), [rows, sort])
+  const selectedView = savedViews.find(view => view.id === selectedViewId) ?? null
 
   return (
     <div>
@@ -261,7 +521,53 @@ export default function Outline() {
           ))}
         </div>
 
+        <div style={{ display: 'grid', gap: 8 }}>
+          <label style={{ fontSize: 12, opacity: 0.7 }}>Statuses</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {STATUSES.map(status => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => toggleStatus(status)}
+                style={{
+                  border: statusFilter.includes(status) ? '1px solid #7aa2ff' : '1px solid #333',
+                  background: statusFilter.includes(status) ? 'rgba(122, 162, 255, 0.2)' : 'transparent',
+                }}
+              >
+                {status}
+              </button>
+            ))}
+            {statusFilter.length > 0 && (
+              <button type="button" onClick={() => setStatusFilter([])}>
+                Clear statuses
+              </button>
+            )}
+          </div>
+        </div>
+
         <TagInput value={tagFilter} onChange={setTagFilter} placeholder="Filter tags" />
+
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12 }}>
+          <input
+            type="checkbox"
+            checked={pinnedOnly}
+            onChange={(event) => setPinnedOnly(event.target.checked)}
+          />
+          Pinned only
+        </label>
+
+        <div style={{ display: 'grid', gap: 6 }}>
+          <label style={{ fontSize: 12, opacity: 0.7 }}>Sort</label>
+          <select
+            value={sort}
+            onChange={(event) => setSort(event.target.value as ViewSort)}
+            style={{ padding: 10, fontSize: 14, width: 'fit-content' }}
+          >
+            <option value="updated">Updated</option>
+            <option value="created">Created</option>
+            <option value="relevance">Relevance</option>
+          </select>
+        </div>
 
         {hasFilters && (
           <button
@@ -269,7 +575,10 @@ export default function Outline() {
             onClick={() => {
               setQ('')
               setTypeFilter('all')
+              setStatusFilter([])
               setTagFilter([])
+              setPinnedOnly(false)
+              setSort('updated')
             }}
             style={{
               padding: '8px 12px',
@@ -284,6 +593,53 @@ export default function Outline() {
           >
             Clear filters
           </button>
+        )}
+      </div>
+
+      <div
+        style={{
+          border: '1px solid #333',
+          borderRadius: 12,
+          padding: 12,
+          marginBottom: 16,
+          display: 'grid',
+          gap: 8,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <strong>Saved views</strong>
+          <button type="button" onClick={handleSaveView}>
+            Save view
+          </button>
+        </div>
+        {viewsLoading && <span style={{ fontSize: 12, opacity: 0.7 }}>Loading views…</span>}
+        {!viewsLoading && savedViews.length === 0 && (
+          <span style={{ fontSize: 12, opacity: 0.6 }}>No saved views yet.</span>
+        )}
+        {savedViews.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {savedViews.map(view => (
+              <button
+                key={view.id}
+                type="button"
+                onClick={() => applyView(view)}
+                disabled={selectedViewId === view.id}
+                style={{
+                  border: selectedViewId === view.id ? '1px solid #7aa2ff' : '1px solid #333',
+                  background: selectedViewId === view.id ? 'rgba(122, 162, 255, 0.2)' : 'transparent',
+                }}
+              >
+                {view.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {selectedView && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button type="button" onClick={() => handleRenameView(selectedView)}>Rename</button>
+            <button type="button" onClick={() => handleUpdateView(selectedView)}>Update filters</button>
+            <button type="button" onClick={() => handleDeleteView(selectedView)}>Delete</button>
+          </div>
         )}
       </div>
 
@@ -372,7 +728,7 @@ export default function Outline() {
             <span>Tags</span>
           </div>
 
-          {rows.map(row => (
+          {sortedRows.map(row => (
             <div
               key={row.id}
               style={{

@@ -11,16 +11,20 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
 - Outline/table view at `/outline` with multi-select + bulk actions (status + tags).
 - Shared `list_nodes` RPC for owner-scoped listing with FTS + tag AND filters.
 - Node detail view with editable fields, tag editing, and links/backlinks.
+- Review Mode at `/review` for due items + quick actions (snooze/promote/archive/pin).
+- Home dashboard at `/home` with key panels + saved views list.
+- Saved views (smart lists) with CRUD + deep-link to Outline filters.
 - Keep UI phone-first and minimal; no new dependencies.
 
 ## Goals achieved in this commit
-- Added `/board` Kanban with drag/drop, optimistic status updates, and tag chips.
-- Added `/outline` table with multi-select, bulk status update, and bulk tag add.
-- Added `list_nodes` + `set_node_status` RPCs (owner-scoped) in SQL migration.
-- Added shared `TagChips` component; wired new routes in App header/nav.
-- Added `/node/:id` node detail page with edit/save + archive + tag sync.
-- Added edges table + RLS + RPCs for node detail and links/backlinks.
-- Linked Search/Board/Outline titles to node detail pages.
+- Added `/home` dashboard with Inbox/Active/Pinned/Recent panels + saved views list.
+- Added `/review` mode with bucketed due items and quick actions (snooze/promote/archive/pin).
+- Added saved views CRUD and Outline deep-link filter support via query params.
+- Extended `list_nodes` to support pinned/review filters and return updated fields.
+- Added helper RPCs `set_node_pinned` + `set_node_review_after`.
+- Added nodes metadata: `updated_at`, `pinned`, `review_after` + update trigger.
+- Added `saved_views` table with RLS + updated_at trigger.
+- Wired Home/Review routes + nav links; shared status constants + filter helpers.
 
 ## Key implementation notes
 - Tag input UI lives in `src/components/TagInput.tsx`.
@@ -38,6 +42,13 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
   - Bulk tag add reuses `tags` + `node_tags` upserts across selected nodes.
   - File: `src/pages/Outline.tsx`.
 - Shared tag chip renderer: `src/components/TagChips.tsx`.
+- Shared status constants: `src/utils/status.ts`.
+- Filter <-> query param helpers for saved views + Outline deep links:
+  - File: `src/utils/viewFilters.ts`.
+- Home dashboard panels + saved views list:
+  - File: `src/pages/Home.tsx`.
+- Review mode buckets + quick actions:
+  - File: `src/pages/Review.tsx`.
 - Node detail page: `src/pages/NodeDetail.tsx`.
   - Editable title/body/type/status/tags + Save + Archive.
   - Links section with outgoing/incoming backlinks + modal for linking.
@@ -59,6 +70,11 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
   - Creates `edges` table with uniqueness + no-self-link constraints.
   - Adds RLS policies for owner-scoped select/insert/delete.
   - Adds RPCs: `get_node_detail`, `get_node_links`, `create_edge`, `delete_edge`.
+- Migration file: `supabase/migrations/20260125_saved_views_review.sql`.
+  - Adds `updated_at`, `pinned`, `review_after` to `nodes` + updated_at trigger.
+  - Adds `saved_views` table with unique(owner_id, name) + RLS + updated_at trigger.
+  - Extends `public.list_nodes` with `pinned_only`, `review_due_only` + returns updated fields.
+  - Adds RPCs: `set_node_pinned`, `set_node_review_after`.
 
 ## How to apply SQL (Dashboard)
 1. Supabase Dashboard → SQL Editor → New query.
@@ -68,6 +84,8 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
 5. Run.
 6. Paste migration contents from `supabase/migrations/20260125_edges_links.sql`.
 7. Run.
+8. Paste migration contents from `supabase/migrations/20260125_saved_views_review.sql`.
+9. Run.
 
 ## Conventions
 - Keep TypeScript strict; avoid `any` unless unavoidable.
