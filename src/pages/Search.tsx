@@ -12,7 +12,7 @@ type NodeRow = {
 }
 
 type TypeFilter = 'all' | 'idea' | 'task'
-type StatusFilter = 'all' | 'inbox' | 'active' | 'someday' | 'done' | 'archived'
+type StatusFilter = 'all' | 'inbox' | 'active' | 'waiting' | 'someday' | 'done' | 'archived'
 
 function normalizeTag(raw: string) {
   return raw.trim().toLowerCase()
@@ -137,6 +137,7 @@ export default function Search() {
           <option value="all">All statuses</option>
           <option value="inbox">inbox</option>
           <option value="active">active</option>
+          <option value="waiting">waiting</option>
           <option value="someday">someday</option>
           <option value="done">done</option>
           <option value="archived">archived</option>
