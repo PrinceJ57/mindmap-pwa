@@ -20,6 +20,8 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
 - Added `/home` dashboard with Inbox/Active/Pinned/Recent panels + saved views list.
 - Added `/review` mode with bucketed due items and quick actions (snooze/promote/archive/pin).
 - Added saved views CRUD and Outline deep-link filter support via query params.
+- Added `/import` page for bulk import of .md/.txt/.csv with preview + progress + per-item errors.
+- Added shared node write helper (`src/lib/nodeWrites.ts`) and tag parsing helper (`src/lib/tagParse.ts`).
 - Extended `list_nodes` to support pinned/review filters and return updated fields.
 - Added helper RPCs `set_node_pinned` + `set_node_review_after`.
 - Added nodes metadata: `updated_at`, `pinned`, `review_after` + update trigger.
@@ -55,6 +57,12 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
   - File: `src/pages/Home.tsx`.
 - Review mode buckets + quick actions:
   - File: `src/pages/Review.tsx`.
+- Import page for bulk .md/.txt/.csv import with preview, tags, progress, and per-item errors:
+  - File: `src/pages/Import.tsx`.
+- Shared node write helper for create + tag upserts + node_tags linking:
+  - File: `src/lib/nodeWrites.ts`.
+- Tag parsing helpers for inline tags and normalization:
+  - File: `src/lib/tagParse.ts`.
 - Node detail page: `src/pages/NodeDetail.tsx`.
   - Editable title/body/type/status/tags + Save + Archive.
   - Links section with outgoing/incoming backlinks + modal for linking.
@@ -108,4 +116,5 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
 - Select multiple rows in Outline; bulk set status + bulk add tags.
 - Open any node from Search/Board/Outline and edit fields/tags.
 - Add a link from Node Detail; verify backlink shows on target.
+- Import a small .md/.txt/.csv set and verify tags/status are correct.
 - `npm run build` should pass.

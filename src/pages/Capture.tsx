@@ -1,16 +1,8 @@
 import { useState } from 'react'
 import TagInput from '../components/TagInput'
 import { supabase } from '../supabaseClient'
-import {
-  createNodeWithTags,
-  enqueuePayload,
-  errorToString,
-  shouldQueueError,
-  type Energy,
-  type NodeType,
-  type OfflinePayload,
-  type SaveNodeError,
-} from '../offlineQueue'
+import { enqueuePayload, errorToString, shouldQueueError, type SaveNodeError } from '../offlineQueue'
+import { createNodeWithTags, type Energy, type NodeType, type NodeWritePayload } from '../lib/nodeWrites'
 
 type SaveMessage = { tone: 'success' | 'offline'; text: string }
 
@@ -31,7 +23,7 @@ export default function Capture() {
 
     if (!title.trim()) return alert('Title required.')
 
-    const payload: OfflinePayload = {
+    const payload: NodeWritePayload = {
       type,
       title: title.trim(),
       body,

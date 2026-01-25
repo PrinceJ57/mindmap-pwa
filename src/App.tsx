@@ -10,6 +10,7 @@ import Outline from './pages/Outline'
 import NodeDetail from './pages/NodeDetail'
 import Home from './pages/Home'
 import Review from './pages/Review'
+import Import from './pages/Import'
 import { getQueueCount, onQueueUpdate, syncOfflineQueue } from './offlineQueue'
 
 export default function App() {
@@ -90,6 +91,7 @@ export default function App() {
           <Link to="/board">Board</Link>
           <Link to="/outline">Outline</Link>
           <Link to="/review">Review</Link>
+          <Link to="/import">Import</Link>
 
           {queueCount > 0 && (
             <span
@@ -124,6 +126,7 @@ export default function App() {
         <Route path="/board" element={signedIn ? <Board /> : <Navigate to="/login" />} />
         <Route path="/outline" element={signedIn ? <Outline /> : <Navigate to="/login" />} />
         <Route path="/review" element={signedIn ? <Review /> : <Navigate to="/login" />} />
+        <Route path="/import" element={signedIn ? <Import /> : <Navigate to="/login" />} />
         <Route path="/node/:id" element={signedIn ? <NodeDetail /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to={signedIn ? "/home" : "/login"} />} />
       </Routes>
