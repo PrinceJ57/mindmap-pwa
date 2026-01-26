@@ -11,6 +11,9 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import TagChips from './TagChips'
+import { enqueuePayload, errorToString, shouldQueueError, type SaveNodeError } from '../offlineQueue'
+import { createNodeWithTags, type NodeWritePayload } from '../lib/nodeWrites'
+import { parseQuickAdd } from '../lib/quickAddParse'
 import { addRecentNode, getRecentNodes, type RecentNode } from '../lib/recentNodes'
 
 type NodeResult = {
@@ -27,6 +30,7 @@ type PaletteItem = {
   nodeId?: number
   nodeType?: string
   tags?: string[]
+  closeOnSelect?: boolean
   action: () => void
 }
 
@@ -44,6 +48,11 @@ type CommandPaletteProps = {
   enabled: boolean
 }
 
+type QuickAddMessage = {
+  tone: 'success' | 'offline' | 'error'
+  text: string
+}
+
 function normalizeTag(raw: string) {
   return raw.trim().toLowerCase()
 }
@@ -57,6 +66,7 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
   const [results, setResults] = useState<NodeResult[]>([])
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [quickAddMessage, setQuickAddMessage] = useState<QuickAddMessage | null>(null)
   const [recents, setRecents] = useState<RecentNode[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -73,6 +83,7 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
     setResults([])
     setLoading(false)
     setErrorMessage(null)
+    setQuickAddMessage(null)
   }, [])
 
   useImperativeHandle(ref, () => ({ open: openPalette }), [openPalette])
@@ -111,9 +122,33 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
     return () => window.clearTimeout(handle)
   }, [open])
 
+  const rawQuery = query.trim()
+
+  const quickAddInput = useMemo(() => {
+    if (!rawQuery) return ''
+    if (rawQuery.startsWith('>')) return rawQuery.slice(1).trim()
+    if (rawQuery.toLowerCase().startsWith('add ')) return rawQuery.slice(4).trim()
+    return rawQuery
+  }, [rawQuery])
+
+  const parsedQuickAdd = useMemo(() => parseQuickAdd(quickAddInput), [quickAddInput])
+
+  const quickAddHasToken = useMemo(() => {
+    if (!rawQuery) return false
+    const tokenPattern = /(^|\\s)([#@!][^\\s]+|type:(idea|task)|due:\\d{4}-\\d{2}-\\d{2})/i
+    return tokenPattern.test(rawQuery)
+  }, [rawQuery])
+
+  const quickAddEligible =
+    rawQuery.length > 0 &&
+    (rawQuery.startsWith('>') || rawQuery.toLowerCase().startsWith('add ') || quickAddHasToken)
+
+  const quickAddTitle = parsedQuickAdd.title.trim()
+  const searchTerm = quickAddEligible ? quickAddTitle : rawQuery
+
   useEffect(() => {
     if (!open) return
-    const trimmed = query.trim()
+    const trimmed = searchTerm.trim()
     if (!trimmed) {
       setResults([])
       setLoading(false)
@@ -156,7 +191,7 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
       active = false
       window.clearTimeout(handle)
     }
-  }, [open, query])
+  }, [open, searchTerm])
 
   const staticCommands = useMemo<PaletteItem[]>(() => [
     {
@@ -209,6 +244,73 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
     },
   ], [navigate])
 
+  const runQuickAdd = useCallback(async () => {
+    if (!quickAddTitle) {
+      setQuickAddMessage({ tone: 'error', text: 'Title required.' })
+      return
+    }
+
+    setQuickAddMessage(null)
+    const session = (await supabase.auth.getSession()).data.session
+    if (!session) {
+      setQuickAddMessage({ tone: 'error', text: 'Not signed in.' })
+      return
+    }
+
+    const payload: NodeWritePayload = {
+      type: parsedQuickAdd.type ?? 'idea',
+      title: quickAddTitle,
+      body: '',
+      tags: parsedQuickAdd.tags,
+      status: parsedQuickAdd.status ?? 'inbox',
+      context: parsedQuickAdd.context ? parsedQuickAdd.context : null,
+      energy: null,
+      duration_minutes: null,
+      due_at: parsedQuickAdd.due_at ?? null,
+    }
+
+    try {
+      await createNodeWithTags({
+        supabase,
+        userId: session.user.id,
+        payload,
+        allowPartialTags: false,
+      })
+
+      setQuickAddMessage({ tone: 'success', text: 'Created' })
+      setQuery('')
+      setResults([])
+      setSelectedIndex(0)
+      setRecents(getRecentNodes())
+    } catch (error) {
+      const saveError = error as SaveNodeError
+      const shouldQueue = saveError.stage !== 'tag' && shouldQueueError(saveError.original ?? saveError)
+      if (shouldQueue) {
+        enqueuePayload(payload, errorToString(saveError))
+        setQuickAddMessage({ tone: 'offline', text: 'Saved offline; will sync.' })
+        setQuery('')
+        setResults([])
+        setSelectedIndex(0)
+        setRecents(getRecentNodes())
+        return
+      }
+      setQuickAddMessage({ tone: 'error', text: errorToString(saveError) })
+    }
+  }, [parsedQuickAdd, quickAddTitle])
+
+  const quickAddItem = useMemo<PaletteItem | null>(() => {
+    if (!quickAddEligible || !quickAddTitle) return null
+    return {
+      id: 'quick-add',
+      label: `Create: ${quickAddTitle}`,
+      kind: 'command',
+      closeOnSelect: false,
+      action: () => {
+        void runQuickAdd()
+      },
+    }
+  }, [quickAddEligible, quickAddTitle, runQuickAdd])
+
   const recentItems = useMemo<PaletteItem[]>(
     () =>
       recents.map(item => ({
@@ -237,17 +339,22 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
     [navigate, results],
   )
 
-  const trimmedQuery = query.trim()
-
   const sections = useMemo<Section[]>(() => {
-    const entries: Section[] = [
-      {
-        title: 'Commands',
-        items: staticCommands,
-      },
-    ]
+    const entries: Section[] = []
 
-    if (!trimmedQuery) {
+    if (quickAddItem) {
+      entries.push({
+        title: 'Quick Add',
+        items: [quickAddItem],
+      })
+    }
+
+    entries.push({
+      title: 'Commands',
+      items: staticCommands,
+    })
+
+    if (!searchTerm) {
       entries.push({
         title: 'Recent',
         items: recentItems,
@@ -262,7 +369,7 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
     }
 
     return entries
-  }, [errorMessage, loading, recentItems, resultItems, staticCommands, trimmedQuery])
+  }, [errorMessage, loading, quickAddItem, recentItems, resultItems, searchTerm, staticCommands])
 
   const selectableItems = useMemo(
     () => sections.flatMap(section => section.items),
@@ -286,7 +393,9 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
           tags: item.tags ?? [],
         })
       }
-      closePalette()
+      if (item.closeOnSelect !== false) {
+        closePalette()
+      }
       item.action()
     },
     [closePalette],
@@ -334,6 +443,7 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
             const nextValue = event.target.value
             setQuery(nextValue)
             setSelectedIndex(0)
+            setQuickAddMessage(null)
             if (nextValue.trim()) {
               setResults([])
             }
@@ -343,6 +453,12 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
           className="input paletteInput"
           aria-label="Command palette search"
         />
+
+        {quickAddMessage && (
+          <div className={`paletteNotice paletteNotice--${quickAddMessage.tone}`}>
+            {quickAddMessage.text}
+          </div>
+        )}
 
         <div className="paletteList" role="listbox" aria-labelledby="command-palette-title">
           {sections.map(section => (

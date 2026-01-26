@@ -141,3 +141,20 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
   - Arrow Up/Down changes selection; Enter runs the highlighted item.
   - Search for a node title/body and open it; ensure it navigates to `/node/:id`.
   - Open a few nodes and re-open the palette with empty query to see Recent nodes.
+
+## Quick Add update (2026-01-26)
+- Summary: Added Quick Add smart-line parsing and Command Palette integration for fast node creation with tags, context, status, type, and due date. Uses existing node write helper and offline queue behavior.
+- Files touched: `src/components/CommandPalette.tsx`, `src/lib/quickAddParse.ts`, `src/index.css`, `AGENTS.md`.
+- Goals:
+  - Quick Add parser implemented.
+  - Supports #tags, @context, !status, type:, due:.
+  - Reuses node creation helper and offline queue.
+  - No breaking changes.
+- Verification commands (expected results):
+  - `npm run dev` (dev server starts, app loads).
+  - `npm run build` (production build succeeds).
+- Manual test checklist:
+  - Open Command Palette and type `> Fix bathroom fan #renovation @home !active type:task due:2026-02-01` then press Enter; see “Created”.
+  - Simulate offline (disable network) and create a Quick Add; see “Saved offline; will sync.” and queued count updates.
+  - Open palette with empty query to ensure commands + recents still render.
+  - Ensure existing capture, search, board, outline, review, import, and node detail flows still work.
