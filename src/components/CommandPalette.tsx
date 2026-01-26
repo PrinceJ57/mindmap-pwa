@@ -6,7 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
@@ -80,7 +80,7 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
   useEffect(() => {
     if (!enabled) return
 
-    const onKeyDown = (event: KeyboardEvent) => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented) return
 
       const key = event.key.toLowerCase()
@@ -293,7 +293,7 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
   )
 
   const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
+    (event: ReactKeyboardEvent<HTMLInputElement>) => {
       if (event.key === 'ArrowDown') {
         event.preventDefault()
         setSelectedIndex(prev => (selectableItems.length === 0 ? 0 : (prev + 1) % selectableItems.length))
