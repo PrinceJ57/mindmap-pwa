@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import type { Session } from '@supabase/supabase-js'
 import Login from './pages/Login'
@@ -12,6 +12,7 @@ import Home from './pages/Home'
 import Review from './pages/Review'
 import Import from './pages/Import'
 import { getQueueCount, onQueueUpdate, syncOfflineQueue } from './offlineQueue'
+import { CAPTURE_PREFILL_STORAGE_KEY, parsePrefillParams } from './lib/queryPrefill'
 
 export default function App() {
   const [loading, setLoading] = useState(true)
@@ -20,6 +21,7 @@ export default function App() {
   const [syncing, setSyncing] = useState(false)
   const syncingRef = useRef(false)
   const navigate = useNavigate()
+  const location = useLocation()
 
   useEffect(() => {
     supabase.auth.getSession().then((res: { data: { session: Session | null } }) => {
@@ -40,6 +42,13 @@ export default function App() {
     update()
     return onQueueUpdate(update)
   }, [])
+
+  useEffect(() => {
+    if (location.pathname !== '/capture') return
+    const prefill = parsePrefillParams(location.search)
+    if (!prefill.hasPrefill) return
+    window.sessionStorage.setItem(CAPTURE_PREFILL_STORAGE_KEY, location.search)
+  }, [location.pathname, location.search])
 
   const runSync = useCallback(async () => {
     if (!signedIn) return

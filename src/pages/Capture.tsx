@@ -1,13 +1,16 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import TagInput from '../components/TagInput'
 import { supabase } from '../supabaseClient'
 import { enqueuePayload, errorToString, shouldQueueError, type SaveNodeError } from '../offlineQueue'
 import { createNodeWithTags, type Energy, type NodeType, type NodeWritePayload } from '../lib/nodeWrites'
+import { CAPTURE_PREFILL_STORAGE_KEY, parsePrefillParams } from '../lib/queryPrefill'
+import { STATUSES, type Status } from '../utils/status'
 
 type SaveMessage = { tone: 'success' | 'offline'; text: string }
 
 export default function Capture() {
   const [type, setType] = useState<NodeType>('idea')
+  const [status, setStatus] = useState<Status>('inbox')
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [tags, setTags] = useState<string[]>([])
@@ -15,6 +18,58 @@ export default function Capture() {
   const [energy, setEnergy] = useState<Energy>('medium')
   const [durationMinutes, setDurationMinutes] = useState<number | ''>('')
   const [saveMessage, setSaveMessage] = useState<SaveMessage | null>(null)
+  const [prefilled, setPrefilled] = useState(false)
+  const prefillAppliedRef = useRef(false)
+
+  const removeQueryFromUrl = useCallback(() => {
+    const next = window.location.pathname + window.location.hash
+    window.history.replaceState(null, '', next)
+  }, [])
+
+  const clearForm = () => {
+    setType('idea')
+    setStatus('inbox')
+    setTitle('')
+    setBody('')
+    setTags([])
+    setContext('')
+    setEnergy('medium')
+    setDurationMinutes('')
+    setSaveMessage(null)
+    setPrefilled(false)
+    window.sessionStorage.removeItem(CAPTURE_PREFILL_STORAGE_KEY)
+    removeQueryFromUrl()
+  }
+
+  useEffect(() => {
+    if (prefillAppliedRef.current) return
+
+    const search = window.location.search
+    let prefill = parsePrefillParams(search)
+
+    if (!prefill.hasPrefill) {
+      const stored = window.sessionStorage.getItem(CAPTURE_PREFILL_STORAGE_KEY)
+      if (stored) {
+        prefill = parsePrefillParams(stored)
+        if (!prefill.hasPrefill) {
+          window.sessionStorage.removeItem(CAPTURE_PREFILL_STORAGE_KEY)
+        }
+      }
+    }
+
+    if (!prefill.hasPrefill) return
+
+    prefillAppliedRef.current = true
+    setType(prefill.type ?? 'idea')
+    setStatus(prefill.status ?? 'inbox')
+    setTitle(prefill.title)
+    setBody(prefill.body)
+    setTags(prefill.tags)
+    setContext(prefill.context)
+    setPrefilled(true)
+    window.sessionStorage.removeItem(CAPTURE_PREFILL_STORAGE_KEY)
+    if (search) removeQueryFromUrl()
+  }, [removeQueryFromUrl])
 
   async function save() {
     setSaveMessage(null)
@@ -28,7 +83,7 @@ export default function Capture() {
       title: title.trim(),
       body,
       tags,
-      status: 'inbox',
+      status,
       context: context.trim() ? context.trim() : null,
       energy: type === 'task' ? energy : null,
       duration_minutes: type === 'task' && durationMinutes !== '' ? durationMinutes : null,
@@ -70,10 +125,43 @@ export default function Capture() {
     <div>
       <h2>Capture</h2>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+      {prefilled && (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 8,
+            alignItems: 'center',
+            marginBottom: 12,
+            padding: '8px 10px',
+            borderRadius: 6,
+            background: '#eef4ff',
+            color: '#1a1a1a',
+            fontSize: 14,
+          }}
+        >
+          <span>Prefilled from Shortcut</span>
+          <button onClick={clearForm}>Clear</button>
+          <button onClick={removeQueryFromUrl}>Remove query from URL</button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <button onClick={() => setType('idea')} disabled={type === 'idea'}>Idea</button>
         <button onClick={() => setType('task')} disabled={type === 'task'}>Task</button>
       </div>
+
+      <select
+        value={status}
+        onChange={(e) => setStatus(e.target.value as Status)}
+        style={{ width: '100%', padding: 12, fontSize: 16, marginBottom: 12 }}
+      >
+        {STATUSES.map((value) => (
+          <option key={value} value={value}>
+            {value}
+          </option>
+        ))}
+      </select>
 
       <input
         value={title}

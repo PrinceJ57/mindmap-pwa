@@ -30,6 +30,7 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
 - Added offline capture queue with localStorage persistence and auto-sync retry.
 - Capture now queues failed saves (network/transient errors) and shows offline status.
 - Header shows queued count with a “Sync now” button for manual sync.
+- Capture supports Shortcut-style URL prefill (title/body/tags/context/type/status) with a prefill banner and auto-removal of query params.
 
 ## New goals created
 - (Optional) Add a `/queue` page to inspect queued items and retry/remove individually.
@@ -40,6 +41,8 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
   - Enter/comma adds tags; backspace removes last tag.
 - Capture uses TagInput and saves tags via `tags` + `node_tags` upserts.
   - File: `src/pages/Capture.tsx`.
+- Capture can prefill fields from query params and adds the default tag `dictated` when body/text is provided.
+  - Helper: `src/lib/queryPrefill.ts`.
 - Search uses RPC `search_nodes` with type/status/tag filters and tag chips.
   - File: `src/pages/Search.tsx`.
   - Clicking a tag chip adds it to tag filters (AND semantics).
@@ -111,6 +114,7 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
 
 ## Suggested smoke test
 - Create a node with tags in Capture.
+- Open `/capture?body=hello&title=test&tags=a,b&context=phone&type=idea&status=inbox` and confirm prefill + banner + query removal.
 - Search with text + tag filters; click tag chips to AND-filter.
 - Drag a node across statuses in Board; verify status persists after refresh.
 - Select multiple rows in Outline; bulk set status + bulk add tags.
