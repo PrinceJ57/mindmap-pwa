@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { addRecentNode } from '../lib/recentNodes'
 import TagInput from '../components/TagInput'
 import TagChips from '../components/TagChips'
 import { STATUSES, type Status } from '../utils/status'
@@ -115,9 +116,16 @@ export default function NodeDetail() {
       setNode(nextNode)
       setTitle(nextNode.title ?? '')
       setBody(nextNode.body ?? '')
+      const normalizedTags = (detail.tags ?? []).map(normalizeTag).filter(Boolean)
       setType(nextNode.type ?? 'idea')
       setStatus(nextNode.status ?? 'inbox')
-      setTags((detail.tags ?? []).map(normalizeTag).filter(Boolean))
+      setTags(normalizedTags)
+      addRecentNode({
+        id: nextNode.id,
+        title: nextNode.title ?? 'Untitled',
+        type: nextNode.type ?? 'idea',
+        tags: normalizedTags,
+      })
       setLoading(false)
     }
 

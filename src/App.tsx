@@ -13,6 +13,7 @@ import Review from './pages/Review'
 import Import from './pages/Import'
 import { getQueueCount, onQueueUpdate, syncOfflineQueue } from './offlineQueue'
 import { CAPTURE_PREFILL_STORAGE_KEY, parsePrefillParams } from './lib/queryPrefill'
+import CommandPalette, { type CommandPaletteHandle } from './components/CommandPalette'
 
 export default function App() {
   const [loading, setLoading] = useState(true)
@@ -20,6 +21,7 @@ export default function App() {
   const [queueCount, setQueueCount] = useState(0)
   const [syncing, setSyncing] = useState(false)
   const syncingRef = useRef(false)
+  const paletteRef = useRef<CommandPaletteHandle | null>(null)
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -116,6 +118,16 @@ export default function App() {
             )}
 
             <button
+              type="button"
+              onClick={() => paletteRef.current?.open()}
+              className="nav__key"
+              aria-label="Open command palette"
+              title="Command palette (⌘K / Ctrl+K)"
+            >
+              ⌘K
+            </button>
+
+            <button
               onClick={() => void runSync()}
               disabled={syncing || queueCount === 0}
               className="button button--primary"
@@ -142,6 +154,8 @@ export default function App() {
         <Route path="/node/:id" element={signedIn ? <NodeDetail /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to={signedIn ? "/home" : "/login"} />} />
       </Routes>
+
+      <CommandPalette ref={paletteRef} enabled={signedIn} />
     </div>
   )
 }

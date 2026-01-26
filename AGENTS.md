@@ -122,3 +122,22 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
 - Add a link from Node Detail; verify backlink shows on target.
 - Import a small .md/.txt/.csv set and verify tags/status are correct.
 - `npm run build` should pass.
+
+## Command Palette update (2026-01-26)
+- Summary: Added a Command Palette (Cmd/Ctrl+K) with static navigation/actions, node search via RPC, and recent node recall. Integrated a small nav trigger button and added palette styling.
+- Files touched: `src/components/CommandPalette.tsx`, `src/lib/recentNodes.ts`, `src/pages/NodeDetail.tsx`, `src/App.tsx`, `src/index.css`, `AGENTS.md`.
+- Goals:
+  - Command Palette implemented.
+  - Keyboard navigation works.
+  - Node search integrated.
+  - No breaking changes.
+- Verification commands (expected results):
+  - `npm install` (dependencies install cleanly).
+  - `npm run dev` (dev server starts, app loads).
+  - `npm run build` (production build succeeds).
+- Manual test checklist:
+  - Press Cmd/Ctrl+K on desktop to open the palette; Esc closes it.
+  - Click the Cmd+K nav button to open; click overlay to close.
+  - Arrow Up/Down changes selection; Enter runs the highlighted item.
+  - Search for a node title/body and open it; ensure it navigates to `/node/:id`.
+  - Open a few nodes and re-open the palette with empty query to see Recent nodes.
