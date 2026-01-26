@@ -1,5 +1,3 @@
-import React from 'react'
-
 type TagChipsProps = {
   tags?: string[] | null
   onTagClick?: (tag: string) => void
