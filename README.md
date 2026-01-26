@@ -12,7 +12,7 @@ Use it to:
 
 ## Key features
 - **Command Palette (Cmd/Ctrl+K):** global navigation + quick node search.
-- **Quick Add smart line:** create nodes from a single line with tokens (`#tag`, `@context`, `!status`, `type:`, `due:`).
+- **Quick Add smart line:** create nodes from a single line with tokens (`#tag`, `@context`, `!status`, `title:`, `type:`, `due:`).
 - **Capture:** rich capture form with tag chips + prefill via URL.
 - **Search:** full-text search + tag AND filters.
 - **Board:** Kanban with native HTML5 drag/drop.

@@ -135,7 +135,7 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
 
   const quickAddHasToken = useMemo(() => {
     if (!rawQuery) return false
-    const tokenPattern = /(^|\\s)([#@!][^\\s]+|type:(idea|task)|due:\\d{4}-\\d{2}-\\d{2})/i
+    const tokenPattern = /(^|\\s)([#@!][^\\s]+|type:(idea|task)|due:\\d{4}-\\d{2}-\\d{2}|title:)/i
     return tokenPattern.test(rawQuery)
   }, [rawQuery])
 

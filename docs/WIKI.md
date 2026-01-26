@@ -40,6 +40,7 @@ Syntax tokens:
 - `#tag` -> tag (lowercased)
 - `@context` -> context (first one wins)
 - `!status` -> status (`inbox|active|waiting|someday|done|archived`)
+- `title:Your title here` -> explicit title (collects words until another token)
 - `type:idea` or `type:task`
 - `due:YYYY-MM-DD`
 
@@ -52,6 +53,11 @@ Defaults:
 Example:
 ```
 > Fix bathroom fan #renovation #electrical @home !active type:task due:2026-02-01
+```
+
+Example with explicit title:
+```
+> title:Fix bathroom fan #renovation @home !active type:task
 ```
 
 On success: shows “Created” and keeps you in place.
