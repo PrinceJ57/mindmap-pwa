@@ -332,77 +332,61 @@ export default function Review() {
     }
   }
 
-  if (loading) return <div style={{ padding: 16 }}>Loading…</div>
+  if (loading) return <div className="muted">Loading…</div>
 
   if (errorMessage) {
     return (
-      <div style={{ padding: 16 }}>
-        <p style={{ color: '#ff8080' }}>{errorMessage}</p>
+      <div>
+        <p style={{ color: '#f87171' }}>{errorMessage}</p>
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <div>
-        <h2 style={{ marginBottom: 6 }}>Review</h2>
-        <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>Triage items due for review.</p>
+    <div className="stack">
+      <div className="stack-sm">
+        <h2>Review</h2>
+        <p className="muted" style={{ fontSize: 12 }}>Triage items due for review.</p>
       </div>
 
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+      <div className="row row--wrap" style={{ alignItems: 'stretch' }}>
         <aside
-          style={{
-            flex: '1 1 220px',
-            border: '1px solid #333',
-            borderRadius: 12,
-            padding: 12,
-            display: 'grid',
-            gap: 12,
-          }}
+          className="card"
+          style={{ flex: '1 1 220px', display: 'grid', gap: 12 }}
         >
-          <div style={{ display: 'grid', gap: 6 }}>
+          <div className="stack-sm">
             {BUCKETS.map(entry => (
               <button
                 key={entry.key}
                 type="button"
                 onClick={() => setBucket(entry.key)}
                 disabled={bucket === entry.key}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  border: bucket === entry.key ? '1px solid #7aa2ff' : '1px solid #333',
-                  background: bucket === entry.key ? 'rgba(122, 162, 255, 0.2)' : 'transparent',
-                }}
+                className={`button ${bucket === entry.key ? 'button--primary' : 'button--ghost'}`}
+                style={{ justifyContent: 'space-between' }}
               >
                 <span>{entry.label}</span>
-                <span style={{ fontSize: 12, opacity: 0.7 }}>{bucketed[entry.key].length}</span>
+                <span className="muted" style={{ fontSize: 12 }}>{bucketed[entry.key].length}</span>
               </button>
             ))}
           </div>
 
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div className="stack-sm">
             {bucketed[bucket].length === 0 && (
-              <span style={{ fontSize: 12, opacity: 0.6 }}>No items in this bucket.</span>
+              <span className="muted" style={{ fontSize: 12 }}>No items in this bucket.</span>
             )}
             {bucketed[bucket].map(row => (
               <button
                 key={row.id}
                 type="button"
                 onClick={() => setSelectedId(row.id)}
-                style={{
-                  textAlign: 'left',
-                  border: selectedId === row.id ? '1px solid #7aa2ff' : '1px solid #333',
-                  background: selectedId === row.id ? 'rgba(122, 162, 255, 0.15)' : 'transparent',
-                  padding: 10,
-                  display: 'grid',
-                  gap: 6,
-                }}
+                className={`card ${selectedId === row.id ? 'chip--selected' : ''}`}
+                style={{ textAlign: 'left', padding: 10, display: 'grid', gap: 6 }}
               >
                 <strong style={{ fontSize: 14 }}>{row.title}</strong>
-                <span style={{ fontSize: 11, opacity: 0.7 }}>
+                <span className="muted" style={{ fontSize: 11 }}>
                   {row.type} • {row.status}
                 </span>
-                <span style={{ fontSize: 11, opacity: 0.6 }}>
+                <span className="muted" style={{ fontSize: 11 }}>
                   Last touched {formatDate(row.updated_at ?? row.created_at)} ({daysSince(row.updated_at ?? row.created_at)}d)
                 </span>
               </button>
@@ -411,38 +395,31 @@ export default function Review() {
         </aside>
 
         <section
-          style={{
-            flex: '2 1 320px',
-            border: '1px solid #333',
-            borderRadius: 12,
-            padding: 12,
-            display: 'grid',
-            gap: 16,
-            minHeight: 320,
-          }}
+          className="card"
+          style={{ flex: '2 1 320px', display: 'grid', gap: 16, minHeight: 320 }}
         >
           {!selectedRow && (
-            <div style={{ fontSize: 12, opacity: 0.7 }}>Select an item to review.</div>
+            <div className="muted" style={{ fontSize: 12 }}>Select an item to review.</div>
           )}
 
           {selectedRow && (
             <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-                <div style={{ display: 'grid', gap: 4 }}>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <div className="stack-sm">
                   <strong style={{ fontSize: 16 }}>{selectedRow.title}</strong>
-                  <span style={{ fontSize: 12, opacity: 0.7 }}>{selectedRow.type} • {selectedRow.status}</span>
+                  <span className="muted" style={{ fontSize: 12 }}>{selectedRow.type} • {selectedRow.status}</span>
                 </div>
-                <Link to={`/node/${selectedRow.id}`} style={{ fontSize: 12, opacity: 0.7 }}>Open Node Detail</Link>
+                <Link to={`/node/${selectedRow.id}`} className="muted" style={{ fontSize: 12 }}>Open Node Detail</Link>
               </div>
 
               {selectedRow.body && (
-                <div style={{ fontSize: 13, opacity: 0.85, whiteSpace: 'pre-wrap' }}>
+                <div style={{ fontSize: 13, whiteSpace: 'pre-wrap' }}>
                   {selectedRow.body.slice(0, 400)}{selectedRow.body.length > 400 ? '…' : ''}
                 </div>
               )}
 
-              <div style={{ display: 'grid', gap: 8 }}>
-                <label style={{ fontSize: 12, opacity: 0.7 }}>Status</label>
+              <div className="stack-sm">
+                <label className="muted" style={{ fontSize: 12 }}>Status</label>
                 <select
                   value={selectedRow.status}
                   onChange={(event) => {
@@ -453,7 +430,7 @@ export default function Review() {
                       .finally(() => withWorking(selectedRow.id, false))
                   }}
                   disabled={workingIds.has(selectedRow.id)}
-                  style={{ padding: 10, fontSize: 14 }}
+                  className="select"
                 >
                   {STATUSES.map(status => (
                     <option key={status} value={status}>{status}</option>
@@ -461,8 +438,8 @@ export default function Review() {
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gap: 8 }}>
-                <label style={{ fontSize: 12, opacity: 0.7 }}>Tags</label>
+              <div className="stack-sm">
+                <label className="muted" style={{ fontSize: 12 }}>Tags</label>
                 <TagInput
                   value={selectedRow.tags ?? []}
                   onChange={(next) => handleTagsChange(selectedRow.id, next)}
@@ -470,11 +447,12 @@ export default function Review() {
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div className="row row--wrap">
                 <button
                   type="button"
                   onClick={() => handleSnooze(selectedRow.id, 7)}
                   disabled={workingIds.has(selectedRow.id)}
+                  className="button button--ghost"
                 >
                   Snooze 7d
                 </button>
@@ -482,6 +460,7 @@ export default function Review() {
                   type="button"
                   onClick={() => handleSnooze(selectedRow.id, 30)}
                   disabled={workingIds.has(selectedRow.id)}
+                  className="button button--ghost"
                 >
                   Snooze 30d
                 </button>
@@ -489,6 +468,7 @@ export default function Review() {
                   type="button"
                   onClick={() => handleSnooze(selectedRow.id, 90)}
                   disabled={workingIds.has(selectedRow.id)}
+                  className="button button--ghost"
                 >
                   Snooze 90d
                 </button>
@@ -496,6 +476,7 @@ export default function Review() {
                   type="button"
                   onClick={() => handlePromote(selectedRow)}
                   disabled={workingIds.has(selectedRow.id)}
+                  className="button button--primary"
                 >
                   Promote
                 </button>
@@ -503,6 +484,7 @@ export default function Review() {
                   type="button"
                   onClick={() => handleArchive(selectedRow.id)}
                   disabled={workingIds.has(selectedRow.id)}
+                  className="button button--ghost"
                 >
                   Archive
                 </button>
@@ -510,6 +492,7 @@ export default function Review() {
                   type="button"
                   onClick={() => handleTogglePinned(selectedRow)}
                   disabled={workingIds.has(selectedRow.id)}
+                  className="button button--ghost"
                 >
                   {selectedRow.pinned ? 'Unpin' : 'Pin'}
                 </button>

@@ -77,34 +77,15 @@ export default function TagInput({ value, onChange, placeholder }: TagInputProps
   }
 
   return (
-    <div style={{ display: 'grid', gap: 8 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+    <div className="stack-sm">
+      <div className="row row--wrap">
         {value.map(tag => (
-          <span
-            key={tag}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '6px 10px',
-              borderRadius: 999,
-              background: '#222',
-              color: '#fff',
-              fontSize: 12,
-            }}
-          >
+          <span key={tag} className="chip">
             {tag}
             <button
               type="button"
               onClick={() => removeTag(tag)}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: 'inherit',
-                cursor: 'pointer',
-                fontSize: 14,
-                lineHeight: 1,
-              }}
+              className="chip__close"
               aria-label={`Remove ${tag}`}
             >
               ×
@@ -119,40 +100,18 @@ export default function TagInput({ value, onChange, placeholder }: TagInputProps
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder ?? 'Add tag'}
-          style={{ width: '100%', padding: 12, fontSize: 16 }}
+          className="input"
         />
 
         {loading ? null : suggestions.length > 0 && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              background: '#111',
-              border: '1px solid #333',
-              borderRadius: 8,
-              marginTop: 6,
-              zIndex: 10,
-              overflow: 'hidden',
-            }}
-          >
+          <div className="dropdown">
             {suggestions.map(name => (
               <button
                 key={name}
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => addTag(name)}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '8px 12px',
-                  background: 'transparent',
-                  color: '#fff',
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
+                className="dropdown__item"
               >
                 {name}
               </button>

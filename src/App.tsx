@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import type { Session } from '@supabase/supabase-js'
 import Login from './pages/Login'
@@ -83,47 +83,50 @@ export default function App() {
   if (loading) return <div style={{ padding: 16 }}>Loading…</div>
 
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: 16 }}>
+    <div className="container">
       {signedIn && (
-        <header
-          style={{
-            display: 'flex',
-            gap: 12,
-            alignItems: 'center',
-            marginBottom: 16,
-            flexWrap: 'wrap',
-          }}
-        >
-          <Link to="/home">Home</Link>
-          <Link to="/capture">Capture</Link>
-          <Link to="/search">Search</Link>
-          <Link to="/board">Board</Link>
-          <Link to="/outline">Outline</Link>
-          <Link to="/review">Review</Link>
-          <Link to="/import">Import</Link>
+        <header className="nav">
+          <div className="nav__inner">
+            <NavLink to="/home" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+              Home
+            </NavLink>
+            <NavLink to="/capture" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+              Capture
+            </NavLink>
+            <NavLink to="/search" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+              Search
+            </NavLink>
+            <NavLink to="/board" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+              Board
+            </NavLink>
+            <NavLink to="/outline" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+              Outline
+            </NavLink>
+            <NavLink to="/review" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+              Review
+            </NavLink>
+            <NavLink to="/import" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+              Import
+            </NavLink>
 
-          {queueCount > 0 && (
-            <span
-              aria-live="polite"
-              style={{
-                fontSize: 12,
-                padding: '4px 8px',
-                borderRadius: 999,
-                background: '#f1f1f1',
-              }}
+            {queueCount > 0 && (
+              <span aria-live="polite" className="badge">
+                Queued: {queueCount}
+              </span>
+            )}
+
+            <button
+              onClick={() => void runSync()}
+              disabled={syncing || queueCount === 0}
+              className="button button--primary"
+              style={{ marginLeft: 'auto' }}
             >
-              Queued: {queueCount}
-            </span>
-          )}
-
-          <button
-            onClick={() => void runSync()}
-            disabled={syncing || queueCount === 0}
-            style={{ marginLeft: 'auto' }}
-          >
-            {syncing ? 'Syncing…' : 'Sync now'}
-          </button>
-          <button onClick={signOut}>Sign out</button>
+              {syncing ? 'Syncing…' : 'Sync now'}
+            </button>
+            <button onClick={signOut} className="button button--ghost">
+              Sign out
+            </button>
+          </div>
         </header>
       )}
 

@@ -155,23 +155,24 @@ export default function Board() {
   const hasFilters = q.trim() !== '' || typeFilter !== 'all' || tagFilter.length > 0
 
   return (
-    <div>
+    <div className="stack">
       <h2>Board</h2>
 
-      <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
+      <div className="stack-sm">
         <input
           value={q}
           onChange={(event) => setQ(event.target.value)}
           placeholder="Search title/body…"
-          style={{ width: '100%', padding: 12, fontSize: 16 }}
+          className="input"
         />
 
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="row row--wrap">
           {(['all', 'idea', 'task'] as TypeFilter[]).map(option => (
             <button
               key={option}
               onClick={() => setTypeFilter(option)}
               disabled={typeFilter === option}
+              className={`button ${typeFilter === option ? 'button--primary' : 'button--ghost'}`}
             >
               {option === 'all' ? 'All' : option === 'idea' ? 'Ideas' : 'Tasks'}
             </button>
@@ -188,16 +189,8 @@ export default function Board() {
               setTypeFilter('all')
               setTagFilter([])
             }}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #333',
-              background: '#111',
-              color: '#fff',
-              fontSize: 12,
-              cursor: 'pointer',
-              width: 'fit-content',
-            }}
+            className="button button--ghost"
+            style={{ width: 'fit-content' }}
           >
             Clear filters
           </button>
@@ -205,15 +198,9 @@ export default function Board() {
       </div>
 
       {loading && <p>Loading board…</p>}
-      {errorMessage && <p style={{ color: '#ff8080' }}>{errorMessage}</p>}
+      {errorMessage && <p style={{ color: '#f87171' }}>{errorMessage}</p>}
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: 12,
-        }}
-      >
+      <div className="board">
         {STATUSES.map(status => {
           const items = grouped.get(status) ?? []
           const isOver = overStatus === status
@@ -223,24 +210,15 @@ export default function Board() {
               onDragOver={(event) => handleDragOver(event, status)}
               onDragLeave={() => handleDragLeave(status)}
               onDrop={(event) => handleDrop(event, status)}
-              style={{
-                border: `1px solid ${isOver ? '#7aa2ff' : '#333'}`,
-                borderRadius: 12,
-                padding: 10,
-                background: isOver ? 'rgba(122, 162, 255, 0.1)' : 'transparent',
-                minHeight: 240,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 10,
-              }}
+              className={`column ${isOver ? 'column--over' : ''}`}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div className="column__header">
                 <strong style={{ textTransform: 'capitalize' }}>{status}</strong>
-                <span style={{ fontSize: 12, opacity: 0.7 }}>{items.length}</span>
+                <span className="muted" style={{ fontSize: 12 }}>{items.length}</span>
               </div>
 
               {items.length === 0 && (
-                <div style={{ fontSize: 12, opacity: 0.5, padding: '6px 0' }}>
+                <div className="muted" style={{ fontSize: 12, padding: '6px 0' }}>
                   Drop here
                 </div>
               )}
@@ -251,23 +229,16 @@ export default function Board() {
                   draggable
                   onDragStart={(event) => handleDragStart(event, row)}
                   onDragEnd={handleDragEnd}
-                  style={{
-                    border: '1px solid #333',
-                    borderRadius: 10,
-                    padding: 10,
-                    background: '#0f0f0f',
-                    cursor: 'grab',
-                    opacity: draggedNodeId === row.id ? 0.6 : 1,
-                  }}
+                  className={`cardItem ${draggedNodeId === row.id ? 'cardItem--dragging' : ''}`}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                    <Link to={`/node/${row.id}`} style={{ textDecoration: 'none', color: '#fff' }}>
+                  <div className="row" style={{ justifyContent: 'space-between' }}>
+                    <Link to={`/node/${row.id}`}>
                       <strong style={{ fontSize: 14 }}>{row.title}</strong>
                     </Link>
-                    <span style={{ fontSize: 11, opacity: 0.7 }}>{row.type}</span>
+                    <span className="muted" style={{ fontSize: 11 }}>{row.type}</span>
                   </div>
                   {row.body && (
-                    <p style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+                    <p className="muted" style={{ marginTop: 6, fontSize: 12 }}>
                       {row.body.slice(0, 120)}{row.body.length > 120 ? '…' : ''}
                     </p>
                   )}

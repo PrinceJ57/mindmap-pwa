@@ -398,22 +398,21 @@ export default function Import() {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0 }}>Import</h2>
-        <span style={{ fontSize: 12, padding: '4px 8px', borderRadius: 999, background: '#f2f2f2' }}>
-          Desktop-focused
-        </span>
+    <div className="stack">
+      <div className="row row--wrap">
+        <h2>Import</h2>
+        <span className="badge">Desktop-focused</span>
       </div>
 
-      <section style={{ display: 'grid', gap: 12, padding: 16, border: '1px solid #e0e0e0', borderRadius: 12 }}>
-        <div style={{ display: 'grid', gap: 8 }}>
-          <label style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Source</label>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <section className="card stack-sm">
+        <div className="stack-sm">
+          <label className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Source</label>
+          <div className="row row--wrap">
             <select
               value={sourceChoice}
               onChange={(event) => setSourceChoice(event.target.value as SourceChoice)}
-              style={{ padding: 10, minWidth: 160 }}
+              className="select"
+              style={{ minWidth: 160 }}
             >
               <option value="bear">bear</option>
               <option value="notes">notes</option>
@@ -424,35 +423,31 @@ export default function Import() {
                 value={customSource}
                 onChange={(event) => setCustomSource(event.target.value)}
                 placeholder="custom source tag"
-                style={{ padding: 10, minWidth: 220 }}
+                className="input"
+                style={{ minWidth: 220 }}
               />
             )}
           </div>
         </div>
 
-        <div style={{ display: 'grid', gap: 8 }}>
-          <label style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Default tags</label>
+        <div className="stack-sm">
+          <label className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Default tags</label>
           <TagInput value={tags} onChange={setTags} placeholder="Add tags" />
         </div>
 
-        <div style={{ display: 'grid', gap: 4 }}>
-          <label style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Default status</label>
-          <div style={{ padding: 10, borderRadius: 8, background: '#f7f7f7' }}>{DEFAULT_STATUS}</div>
+        <div className="stack-sm">
+          <label className="muted" style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Default status</label>
+          <div className="preview">{DEFAULT_STATUS}</div>
         </div>
       </section>
 
-      <section style={{ display: 'grid', gap: 12, padding: 16, border: '1px dashed #bdbdbd', borderRadius: 12 }}>
+      <section className="card stack-sm" style={{ borderStyle: 'dashed' }}>
         <div style={{ fontSize: 14, fontWeight: 600 }}>Drop files here</div>
         <div
           onDrop={handleDrop}
           onDragOver={handleDragOver}
-          style={{
-            padding: 24,
-            borderRadius: 12,
-            background: '#fafafa',
-            textAlign: 'center',
-            border: '1px dashed #cfcfcf',
-          }}
+          className="preview"
+          style={{ textAlign: 'center' }}
         >
           Drag .md, .txt, or .csv files here
         </div>
@@ -461,9 +456,10 @@ export default function Import() {
           accept=".md,.txt,.csv"
           multiple
           onChange={handleFileInput}
+          className="input"
         />
         {fileErrors.length > 0 && (
-          <div style={{ color: '#b3261e', fontSize: 13 }}>
+          <div style={{ color: '#f87171', fontSize: 13 }}>
             {fileErrors.map((error, index) => (
               <div key={`${error}-${index}`}>{error}</div>
             ))}
@@ -471,49 +467,48 @@ export default function Import() {
         )}
       </section>
 
-      <section style={{ display: 'grid', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h3 style={{ margin: 0 }}>Preview ({items.length})</h3>
+      <section className="stack-sm">
+        <div className="row">
+          <h3>Preview ({items.length})</h3>
           {items.length > 0 && (
-            <button onClick={resetAll} type="button">
+            <button onClick={resetAll} type="button" className="button button--ghost">
               Clear list
             </button>
           )}
         </div>
         {items.length === 0 ? (
-          <div style={{ padding: 16, borderRadius: 8, background: '#f7f7f7' }}>
+          <div className="preview">
             Add files to see a preview.
           </div>
         ) : (
-          <div style={{ display: 'grid', gap: 12 }}>
+          <div className="stack-sm">
             {items.map((item) => (
               <div
                 key={item.id}
+                className="card"
                 style={{
-                  padding: 12,
-                  borderRadius: 12,
-                  border: '1px solid #e2e2e2',
-                  background: item.state === 'error' ? '#fff4f4' : '#fff',
+                  borderColor: item.state === 'error' ? 'rgba(248, 113, 113, 0.6)' : 'var(--border)',
+                  background: item.state === 'error' ? 'rgba(248, 113, 113, 0.12)' : 'var(--panel)',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <div className="row" style={{ justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ fontWeight: 600 }}>{item.title || 'Untitled'}</div>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                    <div className="muted" style={{ fontSize: 12 }}>
                       {item.sourceLabel}
                       {typeof item.rowIndex === 'number' ? ` · row ${item.rowIndex}` : ''}
                     </div>
                   </div>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>{item.state}</div>
+                  <div className="muted" style={{ fontSize: 12 }}>{item.state}</div>
                 </div>
-                <div style={{ marginTop: 8, fontSize: 13 }}>{getSnippet(item.body)}</div>
+                <div className="preview" style={{ marginTop: 8 }}>{getSnippet(item.body)}</div>
                 {item.extractedTags.length > 0 && (
                   <div style={{ marginTop: 8 }}>
                     <TagChips tags={item.extractedTags} compact />
                   </div>
                 )}
                 {item.error && (
-                  <div style={{ marginTop: 8, fontSize: 12, color: '#b3261e' }}>{item.error}</div>
+                  <div style={{ marginTop: 8, fontSize: 12, color: '#f87171' }}>{item.error}</div>
                 )}
               </div>
             ))}
@@ -521,22 +516,26 @@ export default function Import() {
         )}
       </section>
 
-      <section style={{ display: 'grid', gap: 12, padding: 16, border: '1px solid #e0e0e0', borderRadius: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <button onClick={() => void runImport()} disabled={importing || items.length === 0}>
+      <section className="card stack-sm">
+        <div className="row row--wrap">
+          <button
+            onClick={() => void runImport()}
+            disabled={importing || items.length === 0}
+            className="button button--primary"
+          >
             {importing ? 'Importing...' : 'Import'}
           </button>
           <div style={{ minWidth: 200 }}>
             <progress value={completed} max={items.length || 1} style={{ width: '100%' }} />
           </div>
-          <div style={{ fontSize: 12 }}>{progress}%</div>
+          <div className="muted" style={{ fontSize: 12 }}>{progress}%</div>
         </div>
 
         {summary && (
-          <div style={{ display: 'grid', gap: 6 }}>
+          <div className="stack-sm">
             <div>Imported {summary.success} of {summary.total}. Failed: {summary.failed}.</div>
             {summary.errors.length > 0 && (
-              <div style={{ color: '#b3261e', fontSize: 12 }}>
+              <div style={{ color: '#f87171', fontSize: 12 }}>
                 {summary.errors.map((error) => (
                   <div key={error.id}>{error.title}: {error.message}</div>
                 ))}

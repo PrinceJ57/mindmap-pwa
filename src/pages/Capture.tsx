@@ -122,39 +122,41 @@ export default function Capture() {
   }
 
   return (
-    <div>
+    <div className="stack">
       <h2>Capture</h2>
 
       {prefilled && (
         <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 8,
-            alignItems: 'center',
-            marginBottom: 12,
-            padding: '8px 10px',
-            borderRadius: 6,
-            background: '#eef4ff',
-            color: '#1a1a1a',
-            fontSize: 14,
-          }}
+          className="card row row--wrap"
+          style={{ background: 'rgba(37, 99, 235, 0.15)', borderColor: 'rgba(37, 99, 235, 0.45)' }}
         >
           <span>Prefilled from Shortcut</span>
-          <button onClick={clearForm}>Clear</button>
-          <button onClick={removeQueryFromUrl}>Remove query from URL</button>
+          <button onClick={clearForm} className="button button--ghost">Clear</button>
+          <button onClick={removeQueryFromUrl} className="button button--ghost">Remove query from URL</button>
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <button onClick={() => setType('idea')} disabled={type === 'idea'}>Idea</button>
-        <button onClick={() => setType('task')} disabled={type === 'task'}>Task</button>
+      <div className="row row--wrap">
+        <button
+          onClick={() => setType('idea')}
+          disabled={type === 'idea'}
+          className={`button ${type === 'idea' ? 'button--primary' : 'button--ghost'}`}
+        >
+          Idea
+        </button>
+        <button
+          onClick={() => setType('task')}
+          disabled={type === 'task'}
+          className={`button ${type === 'task' ? 'button--primary' : 'button--ghost'}`}
+        >
+          Task
+        </button>
       </div>
 
       <select
         value={status}
         onChange={(e) => setStatus(e.target.value as Status)}
-        style={{ width: '100%', padding: 12, fontSize: 16, marginBottom: 12 }}
+        className="select"
       >
         {STATUSES.map((value) => (
           <option key={value} value={value}>
@@ -167,7 +169,7 @@ export default function Capture() {
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Title"
-        style={{ width: '100%', padding: 12, fontSize: 16, marginBottom: 12 }}
+        className="input"
       />
 
       <textarea
@@ -175,7 +177,7 @@ export default function Capture() {
         onChange={(e) => setBody(e.target.value)}
         placeholder="Details…"
         rows={6}
-        style={{ width: '100%', padding: 12, fontSize: 16, marginBottom: 12 }}
+        className="textarea"
       />
 
       <TagInput value={tags} onChange={setTags} placeholder="Add tags" />
@@ -184,22 +186,22 @@ export default function Capture() {
         value={context}
         onChange={(e) => setContext(e.target.value)}
         placeholder="context (home/shop/computer/errands)"
-        style={{ width: '100%', padding: 12, fontSize: 16, marginTop: 12, marginBottom: 12 }}
+        className="input"
       />
 
       {type === 'task' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <input
             value={durationMinutes}
             onChange={(e) => setDurationMinutes(e.target.value ? Number(e.target.value) : '')}
             placeholder="duration (min)"
             inputMode="numeric"
-            style={{ width: '100%', padding: 12, fontSize: 16 }}
+            className="input"
           />
           <select
             value={energy}
             onChange={(e) => setEnergy(e.target.value as Energy)}
-            style={{ width: '100%', padding: 12, fontSize: 16 }}
+            className="select"
           >
             <option value="low">low energy</option>
             <option value="medium">medium energy</option>
@@ -208,20 +210,17 @@ export default function Capture() {
         </div>
       )}
 
-      <button onClick={save} style={{ width: '100%', padding: 14, fontSize: 16 }}>
+      <button onClick={save} className="button button--primary" style={{ width: '100%' }}>
         Save
       </button>
 
       {saveMessage && (
         <div
           role="status"
+          className="card"
           style={{
-            marginTop: 10,
-            padding: '8px 10px',
-            borderRadius: 6,
-            background: saveMessage.tone === 'offline' ? '#fff4d6' : '#e7f7ef',
-            color: '#1a1a1a',
-            fontSize: 14,
+            background: saveMessage.tone === 'offline' ? 'rgba(245, 158, 11, 0.16)' : 'rgba(16, 185, 129, 0.16)',
+            borderColor: saveMessage.tone === 'offline' ? 'rgba(245, 158, 11, 0.4)' : 'rgba(16, 185, 129, 0.4)',
           }}
         >
           {saveMessage.text}

@@ -176,62 +176,52 @@ export default function Home() {
     { title: 'Recently updated', count: null, rows: recentItems },
   ]), [inboxCount, inboxItems, activeTasks, pinnedItems, recentItems])
 
-  if (loading) return <div style={{ padding: 16 }}>Loading…</div>
+  if (loading) return <div className="muted">Loading…</div>
 
   if (errorMessage) {
     return (
-      <div style={{ padding: 16 }}>
-        <p style={{ color: '#ff8080' }}>{errorMessage}</p>
+      <div>
+        <p style={{ color: '#f87171' }}>{errorMessage}</p>
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'grid', gap: 20 }}>
-      <div>
-        <h2 style={{ marginBottom: 6 }}>Home</h2>
-        <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>Quick view of what needs attention.</p>
+    <div className="stack">
+      <div className="stack-sm">
+        <h2>Home</h2>
+        <p className="muted" style={{ fontSize: 12 }}>Quick view of what needs attention.</p>
       </div>
 
       <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: 16,
-        }}
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}
       >
         {panels.map(panel => (
           <section
             key={panel.title}
-            style={{
-              border: '1px solid #333',
-              borderRadius: 12,
-              padding: 12,
-              display: 'grid',
-              gap: 10,
-              minHeight: 220,
-            }}
+            className="card"
+            style={{ display: 'grid', gap: 10, minHeight: 220 }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
               <strong>{panel.title}</strong>
               {panel.count !== null && (
-                <span style={{ fontSize: 12, opacity: 0.7 }}>{panel.count}</span>
+                <span className="muted" style={{ fontSize: 12 }}>{panel.count}</span>
               )}
             </div>
 
             {panel.rows.length === 0 && (
-              <span style={{ fontSize: 12, opacity: 0.6 }}>No items.</span>
+              <span className="muted" style={{ fontSize: 12 }}>No items.</span>
             )}
 
             {panel.rows.map(row => (
-              <div key={row.id} style={{ display: 'grid', gap: 6, borderTop: '1px solid #222', paddingTop: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <Link to={`/node/${row.id}`} style={{ color: '#fff', textDecoration: 'none' }}>
+              <div key={row.id} style={{ display: 'grid', gap: 6, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <Link to={`/node/${row.id}`}>
                     <strong style={{ fontSize: 14 }}>{row.title}</strong>
                   </Link>
-                  <span style={{ fontSize: 11, opacity: 0.7 }}>{row.type}</span>
+                  <span className="muted" style={{ fontSize: 11 }}>{row.type}</span>
                 </div>
-                <div style={{ fontSize: 11, opacity: 0.6 }}>
+                <div className="muted" style={{ fontSize: 11 }}>
                   {(() => {
                     const updatedLabel = formatUpdated(row.updated_at ?? row.created_at)
                     return `${row.status}${updatedLabel ? ` • ${updatedLabel}` : ''}`
@@ -245,35 +235,22 @@ export default function Home() {
       </div>
 
       <section
-        style={{
-          border: '1px solid #333',
-          borderRadius: 12,
-          padding: 12,
-          display: 'grid',
-          gap: 10,
-        }}
+        className="card"
+        style={{ display: 'grid', gap: 10 }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="row" style={{ justifyContent: 'space-between' }}>
           <strong>Saved views</strong>
-          <Link to="/outline" style={{ fontSize: 12, opacity: 0.7 }}>Open Outline</Link>
+          <Link to="/outline" className="muted" style={{ fontSize: 12 }}>Open Outline</Link>
         </div>
         {savedViews.length === 0 && (
-          <span style={{ fontSize: 12, opacity: 0.6 }}>Create a saved view from Outline filters.</span>
+          <span className="muted" style={{ fontSize: 12 }}>Create a saved view from Outline filters.</span>
         )}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <div className="row row--wrap">
           {savedViews.map(view => (
             <Link
               key={view.id}
               to={`/outline${filtersToQueryString(view.filters)}`}
-              style={{
-                border: '1px solid #333',
-                borderRadius: 999,
-                padding: '6px 12px',
-                fontSize: 12,
-                color: '#fff',
-                textDecoration: 'none',
-                background: '#111',
-              }}
+              className="chip chip--clickable"
             >
               {view.name}
             </Link>

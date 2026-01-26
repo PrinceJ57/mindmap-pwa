@@ -9,25 +9,17 @@ type TagChipsProps = {
 export default function TagChips({ tags, onTagClick, compact }: TagChipsProps) {
   if (!tags || tags.length === 0) return null
 
-  const baseStyle: React.CSSProperties = {
-    padding: compact ? '2px 6px' : '4px 8px',
-    borderRadius: 999,
-    border: '1px solid #333',
-    background: '#111',
-    color: '#fff',
-    fontSize: compact ? 10 : 11,
-  }
-
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+    <div className="row row--wrap">
       {tags.map(tag => {
+        const className = `chip${compact ? ' chip--compact' : ''}${onTagClick ? ' chip--clickable' : ''}`
         if (onTagClick) {
           return (
             <button
               key={tag}
               type="button"
               onClick={() => onTagClick(tag)}
-              style={{ ...baseStyle, cursor: 'pointer' }}
+              className={className}
             >
               {tag}
             </button>
@@ -35,7 +27,7 @@ export default function TagChips({ tags, onTagClick, compact }: TagChipsProps) {
         }
 
         return (
-          <span key={tag} style={baseStyle}>
+          <span key={tag} className={className}>
             {tag}
           </span>
         )

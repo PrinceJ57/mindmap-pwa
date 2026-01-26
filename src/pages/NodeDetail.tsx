@@ -398,46 +398,46 @@ export default function NodeDetail() {
 
   const filteredResults = linkResults.filter(row => row.id !== node?.id)
 
-  if (loading) return <div style={{ padding: 16 }}>Loading…</div>
+  if (loading) return <div className="muted">Loading…</div>
 
   if (errorMessage) {
     return (
-      <div style={{ padding: 16 }}>
-        <p style={{ color: '#ff8080' }}>{errorMessage}</p>
+      <div>
+        <p style={{ color: '#f87171' }}>{errorMessage}</p>
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'grid', gap: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <div>
-          <h2 style={{ marginBottom: 6 }}>Node Detail</h2>
+    <div className="stack">
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <div className="stack-sm">
+          <h2>Node Detail</h2>
           {node && (
-            <div style={{ fontSize: 12, opacity: 0.7 }}>
+            <div className="muted" style={{ fontSize: 12 }}>
               ID {node.id}
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={handleArchive} disabled={saving || status === 'archived'}>Archive</button>
-          <button onClick={handleSave} disabled={saving}>Save</button>
+        <div className="row row--wrap">
+          <button onClick={handleArchive} disabled={saving || status === 'archived'} className="button button--ghost">Archive</button>
+          <button onClick={handleSave} disabled={saving} className="button button--primary">Save</button>
         </div>
       </div>
 
-      {saveMessage && <div style={{ fontSize: 12, opacity: 0.8 }}>{saveMessage}</div>}
+      {saveMessage && <div className="muted" style={{ fontSize: 12 }}>{saveMessage}</div>}
 
-      <div style={{ display: 'grid', gap: 12 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setType('idea')} disabled={type === 'idea'}>Idea</button>
-          <button onClick={() => setType('task')} disabled={type === 'task'}>Task</button>
+      <div className="stack-sm">
+        <div className="row row--wrap">
+          <button onClick={() => setType('idea')} disabled={type === 'idea'} className={`button ${type === 'idea' ? 'button--primary' : 'button--ghost'}`}>Idea</button>
+          <button onClick={() => setType('task')} disabled={type === 'task'} className={`button ${type === 'task' ? 'button--primary' : 'button--ghost'}`}>Task</button>
         </div>
 
         <input
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Title"
-          style={{ width: '100%', padding: 12, fontSize: 16 }}
+          className="input"
         />
 
         <textarea
@@ -445,15 +445,15 @@ export default function NodeDetail() {
           onChange={(event) => setBody(event.target.value)}
           placeholder="Details…"
           rows={6}
-          style={{ width: '100%', padding: 12, fontSize: 16 }}
+          className="textarea"
         />
 
-        <div style={{ display: 'grid', gap: 8 }}>
-          <label style={{ fontSize: 12, opacity: 0.7 }}>Status</label>
+        <div className="stack-sm">
+          <label className="muted" style={{ fontSize: 12 }}>Status</label>
           <select
             value={status}
             onChange={(event) => setStatus(event.target.value as Status)}
-            style={{ width: '100%', padding: 12, fontSize: 16 }}
+            className="select"
           >
             {STATUSES.map(option => (
               <option key={option} value={option}>{option}</option>
@@ -461,25 +461,25 @@ export default function NodeDetail() {
           </select>
         </div>
 
-        <div style={{ display: 'grid', gap: 8 }}>
-          <label style={{ fontSize: 12, opacity: 0.7 }}>Tags</label>
+        <div className="stack-sm">
+          <label className="muted" style={{ fontSize: 12 }}>Tags</label>
           <TagInput value={tags} onChange={setTags} placeholder="Add tags" />
         </div>
 
-        <div style={{ display: 'grid', gap: 4, fontSize: 12, opacity: 0.7 }}>
+        <div className="stack-sm muted" style={{ fontSize: 12 }}>
           {createdAt && <div>Created: {createdAt}</div>}
           {updatedAt && <div>Updated: {updatedAt}</div>}
         </div>
       </div>
 
-      <section style={{ display: 'grid', gap: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-          <h3 style={{ margin: 0 }}>Links</h3>
-          <button type="button" onClick={() => setLinkModalOpen(true)}>Link to…</button>
+      <section className="stack-sm">
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h3>Links</h3>
+          <button type="button" onClick={() => setLinkModalOpen(true)} className="button button--ghost">Link to…</button>
         </div>
 
         {linksLoading && <p>Loading links…</p>}
-        {linksError && <p style={{ color: '#ff8080' }}>{linksError}</p>}
+        {linksError && <p style={{ color: '#f87171' }}>{linksError}</p>}
 
         <div
           style={{
@@ -488,40 +488,35 @@ export default function NodeDetail() {
             gap: 12,
           }}
         >
-          <div style={{ border: '1px solid #333', borderRadius: 10, padding: 12, display: 'grid', gap: 8 }}>
+          <div className="card" style={{ display: 'grid', gap: 8 }}>
             <strong>Outgoing</strong>
-            {outgoingLinks.length === 0 && <span style={{ fontSize: 12, opacity: 0.6 }}>No links yet.</span>}
+            {outgoingLinks.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No links yet.</span>}
             {outgoingLinks.map(link => (
               <div
                 key={link.edge_id}
-                style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}
+                className="row"
+                style={{ justifyContent: 'space-between' }}
               >
-                <Link
-                  to={`/node/${link.other_node_id}`}
-                  style={{ textDecoration: 'none', color: '#fff', fontSize: 14 }}
-                >
+                <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
                   {link.other_node_title}
                 </Link>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <span style={{ fontSize: 11, opacity: 0.7 }}>{link.relation}</span>
-                  <button type="button" onClick={() => handleRemoveLink(link.edge_id)}>Remove</button>
+                <div className="row">
+                  <span className="muted" style={{ fontSize: 11 }}>{link.relation}</span>
+                  <button type="button" onClick={() => handleRemoveLink(link.edge_id)} className="button button--ghost">Remove</button>
                 </div>
               </div>
             ))}
           </div>
 
-          <div style={{ border: '1px solid #333', borderRadius: 10, padding: 12, display: 'grid', gap: 8 }}>
+          <div className="card" style={{ display: 'grid', gap: 8 }}>
             <strong>Backlinks</strong>
-            {incomingLinks.length === 0 && <span style={{ fontSize: 12, opacity: 0.6 }}>No backlinks yet.</span>}
+            {incomingLinks.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No backlinks yet.</span>}
             {incomingLinks.map(link => (
-              <div key={link.edge_id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <Link
-                  to={`/node/${link.other_node_id}`}
-                  style={{ textDecoration: 'none', color: '#fff', fontSize: 14 }}
-                >
+              <div key={link.edge_id} className="row" style={{ justifyContent: 'space-between' }}>
+                <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
                   {link.other_node_title}
                 </Link>
-                <span style={{ fontSize: 11, opacity: 0.7 }}>{link.relation}</span>
+                <span className="muted" style={{ fontSize: 11 }}>{link.relation}</span>
               </div>
             ))}
           </div>
@@ -529,46 +524,26 @@ export default function NodeDetail() {
       </section>
 
       {linkModalOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.6)',
-            display: 'grid',
-            placeItems: 'center',
-            padding: 16,
-            zIndex: 50,
-          }}
-        >
-          <div
-            style={{
-              background: '#0f0f0f',
-              border: '1px solid #333',
-              borderRadius: 12,
-              width: 'min(720px, 100%)',
-              padding: 16,
-              display: 'grid',
-              gap: 12,
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="modalOverlay">
+          <div className="modalPanel stack-sm">
+            <div className="row" style={{ justifyContent: 'space-between' }}>
               <strong>Link to…</strong>
-              <button type="button" onClick={() => setLinkModalOpen(false)}>Close</button>
+              <button type="button" onClick={() => setLinkModalOpen(false)} className="button button--ghost">Close</button>
             </div>
 
             <input
               value={linkSearch}
               onChange={(event) => setLinkSearch(event.target.value)}
               placeholder="Search nodes…"
-              style={{ width: '100%', padding: 12, fontSize: 16 }}
+              className="input"
             />
 
-            <div style={{ display: 'grid', gap: 6 }}>
-              <label style={{ fontSize: 12, opacity: 0.7 }}>Relation</label>
+            <div className="stack-sm">
+              <label className="muted" style={{ fontSize: 12 }}>Relation</label>
               <select
                 value={linkRelation}
                 onChange={(event) => setLinkRelation(event.target.value as Relation)}
-                style={{ padding: 10 }}
+                className="select"
               >
                 {RELATIONS.map(option => (
                   <option key={option} value={option}>{option}</option>
@@ -576,39 +551,32 @@ export default function NodeDetail() {
               </select>
             </div>
 
-            {linkLoading && <span style={{ fontSize: 12, opacity: 0.7 }}>Loading…</span>}
+            {linkLoading && <span className="muted" style={{ fontSize: 12 }}>Loading…</span>}
 
-            <div style={{ display: 'grid', gap: 10, maxHeight: '50vh', overflowY: 'auto' }}>
+            <div className="stack-sm" style={{ maxHeight: '50vh', overflowY: 'auto' }}>
               {filteredResults.length === 0 && !linkLoading && (
-                <span style={{ fontSize: 12, opacity: 0.7 }}>No results.</span>
+                <span className="muted" style={{ fontSize: 12 }}>No results.</span>
               )}
               {filteredResults.map(result => {
                 const disabled = outgoingKeySet.has(`${result.id}:${linkRelation}`)
                 return (
                   <div
                     key={result.id}
-                    style={{
-                      border: '1px solid #333',
-                      borderRadius: 10,
-                      padding: 10,
-                      display: 'grid',
-                      gap: 6,
-                    }}
+                    className="card"
+                    style={{ display: 'grid', gap: 6 }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <Link
-                        to={`/node/${result.id}`}
-                        style={{ textDecoration: 'none', color: '#fff', fontWeight: 600 }}
-                      >
+                    <div className="row" style={{ justifyContent: 'space-between' }}>
+                      <Link to={`/node/${result.id}`} style={{ fontWeight: 600 }}>
                         {result.title}
                       </Link>
-                      <span style={{ fontSize: 11, opacity: 0.7 }}>{result.type}</span>
+                      <span className="muted" style={{ fontSize: 11 }}>{result.type}</span>
                     </div>
                     <TagChips tags={result.tags ?? []} compact />
                     <button
                       type="button"
                       onClick={() => handleCreateLink(result.id)}
                       disabled={linkWorking || disabled}
+                      className="button button--primary"
                       style={{ width: 'fit-content' }}
                     >
                       {disabled ? 'Already linked' : 'Link'}

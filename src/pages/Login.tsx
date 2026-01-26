@@ -28,19 +28,22 @@ export default function Login() {
   }
 
   return (
-    <div>
-      <h2>Login</h2>
-      <p>Sign in with Google.</p>
+    <div className="stack">
+      <div className="stack-sm">
+        <h2>Login</h2>
+        <p className="muted">Sign in with Google.</p>
+      </div>
 
       <button
         onClick={signInWithGoogle}
         disabled={loading}
-        style={{ width: '100%', padding: 12, marginTop: 12, fontSize: 16 }}
+        className="button button--primary"
+        style={{ width: '100%' }}
       >
         {loading ? 'Opening Google…' : 'Continue with Google'}
       </button>
 
-      {error && <p style={{ color: 'crimson', marginTop: 12 }}>{error}</p>}
+      {error && <p style={{ color: '#f87171' }}>{error}</p>}
     </div>
   )
 }

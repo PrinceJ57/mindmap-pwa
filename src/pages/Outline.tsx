@@ -498,47 +498,45 @@ export default function Outline() {
   const selectedView = savedViews.find(view => view.id === selectedViewId) ?? null
 
   return (
-    <div>
+    <div className="stack">
       <h2>Outline</h2>
 
-      <div style={{ display: 'grid', gap: 12, marginBottom: 16 }}>
+      <div className="stack-sm">
         <input
           value={q}
           onChange={(event) => setQ(event.target.value)}
           placeholder="Search title/body…"
-          style={{ width: '100%', padding: 12, fontSize: 16 }}
+          className="input"
         />
 
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="row row--wrap">
           {(['all', 'idea', 'task'] as TypeFilter[]).map(option => (
             <button
               key={option}
               onClick={() => setTypeFilter(option)}
               disabled={typeFilter === option}
+              className={`button ${typeFilter === option ? 'button--primary' : 'button--ghost'}`}
             >
               {option === 'all' ? 'All' : option === 'idea' ? 'Ideas' : 'Tasks'}
             </button>
           ))}
         </div>
 
-        <div style={{ display: 'grid', gap: 8 }}>
-          <label style={{ fontSize: 12, opacity: 0.7 }}>Statuses</label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div className="stack-sm">
+          <label className="muted" style={{ fontSize: 12 }}>Statuses</label>
+          <div className="row row--wrap">
             {STATUSES.map(status => (
               <button
                 key={status}
                 type="button"
                 onClick={() => toggleStatus(status)}
-                style={{
-                  border: statusFilter.includes(status) ? '1px solid #7aa2ff' : '1px solid #333',
-                  background: statusFilter.includes(status) ? 'rgba(122, 162, 255, 0.2)' : 'transparent',
-                }}
+                className={`chip chip--clickable${statusFilter.includes(status) ? ' chip--selected' : ''}`}
               >
                 {status}
               </button>
             ))}
             {statusFilter.length > 0 && (
-              <button type="button" onClick={() => setStatusFilter([])}>
+              <button type="button" onClick={() => setStatusFilter([])} className="button button--ghost">
                 Clear statuses
               </button>
             )}
@@ -547,7 +545,7 @@ export default function Outline() {
 
         <TagInput value={tagFilter} onChange={setTagFilter} placeholder="Filter tags" />
 
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12 }}>
+        <label className="row" style={{ fontSize: 12 }}>
           <input
             type="checkbox"
             checked={pinnedOnly}
@@ -556,12 +554,13 @@ export default function Outline() {
           Pinned only
         </label>
 
-        <div style={{ display: 'grid', gap: 6 }}>
-          <label style={{ fontSize: 12, opacity: 0.7 }}>Sort</label>
+        <div className="stack-sm">
+          <label className="muted" style={{ fontSize: 12 }}>Sort</label>
           <select
             value={sort}
             onChange={(event) => setSort(event.target.value as ViewSort)}
-            style={{ padding: 10, fontSize: 14, width: 'fit-content' }}
+            className="select"
+            style={{ width: 'fit-content' }}
           >
             <option value="updated">Updated</option>
             <option value="created">Created</option>
@@ -580,16 +579,8 @@ export default function Outline() {
               setPinnedOnly(false)
               setSort('updated')
             }}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              border: '1px solid #333',
-              background: '#111',
-              color: '#fff',
-              fontSize: 12,
-              cursor: 'pointer',
-              width: 'fit-content',
-            }}
+            className="button button--ghost"
+            style={{ width: 'fit-content' }}
           >
             Clear filters
           </button>
@@ -597,37 +588,28 @@ export default function Outline() {
       </div>
 
       <div
-        style={{
-          border: '1px solid #333',
-          borderRadius: 12,
-          padding: 12,
-          marginBottom: 16,
-          display: 'grid',
-          gap: 8,
-        }}
+        className="card"
+        style={{ display: 'grid', gap: 8 }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="row" style={{ justifyContent: 'space-between' }}>
           <strong>Saved views</strong>
-          <button type="button" onClick={handleSaveView}>
+          <button type="button" onClick={handleSaveView} className="button button--ghost">
             Save view
           </button>
         </div>
-        {viewsLoading && <span style={{ fontSize: 12, opacity: 0.7 }}>Loading views…</span>}
+        {viewsLoading && <span className="muted" style={{ fontSize: 12 }}>Loading views…</span>}
         {!viewsLoading && savedViews.length === 0 && (
-          <span style={{ fontSize: 12, opacity: 0.6 }}>No saved views yet.</span>
+          <span className="muted" style={{ fontSize: 12 }}>No saved views yet.</span>
         )}
         {savedViews.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <div className="row row--wrap">
             {savedViews.map(view => (
               <button
                 key={view.id}
                 type="button"
                 onClick={() => applyView(view)}
                 disabled={selectedViewId === view.id}
-                style={{
-                  border: selectedViewId === view.id ? '1px solid #7aa2ff' : '1px solid #333',
-                  background: selectedViewId === view.id ? 'rgba(122, 162, 255, 0.2)' : 'transparent',
-                }}
+                className={`chip chip--clickable${selectedViewId === view.id ? ' chip--selected' : ''}`}
               >
                 {view.name}
               </button>
@@ -635,37 +617,32 @@ export default function Outline() {
           </div>
         )}
         {selectedView && (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" onClick={() => handleRenameView(selectedView)}>Rename</button>
-            <button type="button" onClick={() => handleUpdateView(selectedView)}>Update filters</button>
-            <button type="button" onClick={() => handleDeleteView(selectedView)}>Delete</button>
+          <div className="row row--wrap">
+            <button type="button" onClick={() => handleRenameView(selectedView)} className="button button--ghost">Rename</button>
+            <button type="button" onClick={() => handleUpdateView(selectedView)} className="button button--ghost">Update filters</button>
+            <button type="button" onClick={() => handleDeleteView(selectedView)} className="button button--ghost">Delete</button>
           </div>
         )}
       </div>
 
       {selectedCount > 0 && (
         <div
-          style={{
-            border: '1px solid #333',
-            borderRadius: 12,
-            padding: 12,
-            marginBottom: 16,
-            display: 'grid',
-            gap: 12,
-          }}
+          className="card"
+          style={{ display: 'grid', gap: 12 }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
             <strong>{selectedCount} selected</strong>
-            {working && <span style={{ fontSize: 12, opacity: 0.7 }}>Working…</span>}
+            {working && <span className="muted" style={{ fontSize: 12 }}>Working…</span>}
           </div>
 
-          <div style={{ display: 'grid', gap: 8 }}>
-            <label style={{ fontSize: 12, opacity: 0.7 }}>Bulk set status</label>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div className="stack-sm">
+            <label className="muted" style={{ fontSize: 12 }}>Bulk set status</label>
+            <div className="row row--wrap">
               <select
                 value={bulkStatus}
                 onChange={(event) => setBulkStatus(event.target.value as Status | '')}
-                style={{ padding: 10, fontSize: 14 }}
+                className="select"
+                style={{ width: 'fit-content' }}
               >
                 <option value="">Select status</option>
                 {STATUSES.map(status => (
@@ -676,19 +653,21 @@ export default function Outline() {
                 type="button"
                 onClick={handleBulkStatus}
                 disabled={!bulkStatus || working}
+                className="button button--primary"
               >
                 Apply
               </button>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gap: 8 }}>
-            <label style={{ fontSize: 12, opacity: 0.7 }}>Bulk add tags</label>
+          <div className="stack-sm">
+            <label className="muted" style={{ fontSize: 12 }}>Bulk add tags</label>
             <TagInput value={bulkTags} onChange={setBulkTags} placeholder="Add tags" />
             <button
               type="button"
               onClick={handleBulkTags}
               disabled={bulkTags.length === 0 || working}
+              className="button button--primary"
               style={{ width: 'fit-content' }}
             >
               Add tags
@@ -698,23 +677,13 @@ export default function Outline() {
       )}
 
       {loading && <p>Loading outline…</p>}
-      {errorMessage && <p style={{ color: '#ff8080' }}>{errorMessage}</p>}
+      {errorMessage && <p style={{ color: '#f87171' }}>{errorMessage}</p>}
 
       {emptyState && <p>No results.</p>}
 
       <div style={{ overflowX: 'auto' }}>
         <div style={{ minWidth: 720, display: 'grid', gap: 8 }}>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '36px 1.6fr 90px 110px 1fr',
-              gap: 12,
-              padding: '8px 4px',
-              borderBottom: '1px solid #333',
-              fontSize: 12,
-              opacity: 0.8,
-            }}
-          >
+          <div style={{ display: 'grid', gridTemplateColumns: '36px 1.6fr 90px 110px 1fr', gap: 12, padding: '8px 4px', borderBottom: '1px solid var(--border)', fontSize: 12 }} className="muted">
             <input
               ref={headerCheckboxRef}
               type="checkbox"
@@ -731,14 +700,7 @@ export default function Outline() {
           {sortedRows.map(row => (
             <div
               key={row.id}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '36px 1.6fr 90px 110px 1fr',
-                gap: 12,
-                padding: '10px 4px',
-                borderBottom: '1px solid #222',
-                alignItems: 'center',
-              }}
+              style={{ display: 'grid', gridTemplateColumns: '36px 1.6fr 90px 110px 1fr', gap: 12, padding: '10px 4px', borderBottom: '1px solid var(--border)', alignItems: 'center' }}
             >
               <input
                 type="checkbox"
@@ -747,20 +709,20 @@ export default function Outline() {
                 aria-label={`Select ${row.title}`}
               />
               <div style={{ display: 'grid', gap: 4 }}>
-                <Link to={`/node/${row.id}`} style={{ textDecoration: 'none', color: '#fff' }}>
+                <Link to={`/node/${row.id}`}>
                   <strong style={{ fontSize: 14 }}>{row.title}</strong>
                 </Link>
                 {row.body && (
-                  <span style={{ fontSize: 12, opacity: 0.7 }}>
+                  <span className="muted" style={{ fontSize: 12 }}>
                     {row.body.slice(0, 120)}{row.body.length > 120 ? '…' : ''}
                   </span>
                 )}
-                <span style={{ fontSize: 11, opacity: 0.6 }}>
+                <span className="muted" style={{ fontSize: 11 }}>
                   {new Date(row.created_at).toLocaleDateString()}
                 </span>
               </div>
-              <span style={{ fontSize: 12 }}>{row.type}</span>
-              <span style={{ fontSize: 12 }}>{row.status}</span>
+              <span className="muted" style={{ fontSize: 12 }}>{row.type}</span>
+              <span className="muted" style={{ fontSize: 12 }}>{row.status}</span>
               <TagChips tags={row.tags ?? []} onTagClick={addTagFilter} compact />
             </div>
           ))}
