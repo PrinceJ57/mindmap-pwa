@@ -50,6 +50,8 @@ export default function Board() {
         type_filter: typeFilter === 'all' ? null : typeFilter,
         status_filter: null,
         tag_filter: tagFilter.length ? tagFilter : null,
+        pinned_only: false,
+        review_due_only: false,
       })
 
       if (!active) return

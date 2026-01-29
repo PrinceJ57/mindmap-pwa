@@ -162,6 +162,8 @@ export default function NodeDetail() {
         type_filter: null,
         status_filter: null,
         tag_filter: null,
+        pinned_only: false,
+        review_due_only: false,
       })
 
       if (!active) return
