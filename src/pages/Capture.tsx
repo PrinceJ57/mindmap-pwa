@@ -58,6 +58,17 @@ function splitInput(raw: string) {
 
 function buildPrefillInput() {
   const search = window.location.search
+  const rawParams = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
+  const textParam = rawParams.get('text')
+  if (textParam && textParam.trim()) {
+    const decoded = textParam.replace(/\+/g, ' ')
+    window.sessionStorage.removeItem(CAPTURE_PREFILL_STORAGE_KEY)
+    if (search) {
+      const next = window.location.pathname + window.location.hash
+      window.history.replaceState(null, '', next)
+    }
+    return { text: decoded, prefilled: true }
+  }
   let prefill = parsePrefillParams(search)
 
   if (!prefill.hasPrefill) {
@@ -112,6 +123,25 @@ function buildCaptureUrl(options: {
   return url.toString()
 }
 
+function extractFirstUrl(text: string) {
+  const match = text.match(/https?:\/\/[^\s]+/i) ?? text.match(/www\.[^\s]+/i)
+  if (!match) return null
+  const raw = match[0]
+  const withScheme = raw.startsWith('http') ? raw : `https://${raw}`
+  try {
+    return new URL(withScheme)
+  } catch {
+    return null
+  }
+}
+
+function domainTagFromHost(host: string) {
+  const cleaned = host.replace(/^www\./i, '').toLowerCase()
+  const parts = cleaned.split('.')
+  if (parts.length >= 2) return parts[0]
+  return cleaned
+}
+
 export default function Capture() {
   const [rawInput, setRawInput] = useState('')
   const [saveMessage, setSaveMessage] = useState<SaveMessage | null>(null)
@@ -129,6 +159,20 @@ export default function Capture() {
 
   const { headline, body } = useMemo(() => splitInput(rawInput), [rawInput])
   const parsed = useMemo(() => parseQuickAdd(headline), [headline])
+  const linkInfo = useMemo(() => {
+    const url = extractFirstUrl(rawInput)
+    if (!url) return null
+    const hostname = url.hostname
+    const domainTag = domainTagFromHost(hostname)
+    const path = url.pathname && url.pathname !== '/' ? url.pathname.replace(/\/$/, '') : ''
+    const suggestedTitle = path ? `${hostname} — ${path}` : hostname
+    return {
+      url: url.toString(),
+      hostname,
+      domainTag,
+      suggestedTitle,
+    }
+  }, [rawInput])
 
   const validation = useMemo(() => {
     const tokens = tokenize(headline)
@@ -176,6 +220,11 @@ export default function Capture() {
   }, [headline, parsed.title])
 
   const canSubmit = validation.errors.length === 0 && parsed.title.trim() !== '' && !saving
+  const suggestedTags = useMemo(() => {
+    if (!linkInfo) return []
+    const tags = ['link', linkInfo.domainTag]
+    return tags.filter(tag => tag && !parsed.tags.includes(tag))
+  }, [linkInfo, parsed.tags])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -377,6 +426,40 @@ export default function Capture() {
     }
   }
 
+  async function handleCopyLinkWithText() {
+    const raw = rawInput.trim()
+    const url = new URL('/capture', window.location.origin)
+    if (raw) url.searchParams.set('text', raw)
+    try {
+      await navigator.clipboard.writeText(url.toString())
+      localStorage.setItem(CAPTURE_LINK_COPIED_KEY, String(Date.now()))
+      setSaveMessage({ tone: 'success', text: 'Capture link with text copied.' })
+    } catch {
+      setSaveMessage({ tone: 'error', text: 'Unable to copy capture link.' })
+    }
+  }
+
+  function applySuggestedTags() {
+    if (suggestedTags.length === 0) return
+    setRawInput(prev => {
+      const { headline, body } = splitInput(prev)
+      const tokenString = suggestedTags.map(tag => `#${tag}`).join(' ')
+      const nextHeadline = headline.trim() ? `${tokenString} ${headline}` : tokenString
+      return body ? `${nextHeadline}\n${body}` : nextHeadline
+    })
+    inputRef.current?.focus()
+  }
+
+  function applySuggestedTitle() {
+    if (!linkInfo) return
+    setRawInput(prev => {
+      const { headline, body } = splitInput(prev)
+      const nextHeadline = headline.trim() ? `${linkInfo.suggestedTitle} ${headline}` : linkInfo.suggestedTitle
+      return body ? `${nextHeadline}\n${body}` : nextHeadline
+    })
+    inputRef.current?.focus()
+  }
+
   return (
     <div className="stack capturePage">
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
@@ -513,11 +596,27 @@ export default function Capture() {
             <span className="chip chip--compact">{parsed.status ?? 'inbox'}</span>
             {parsed.context && <span className="chip chip--compact">@{parsed.context}</span>}
             {parsed.due_at && <span className="chip chip--compact">due {parsed.due_at}</span>}
+            {linkInfo && <span className="chip chip--compact">link detected</span>}
           </div>
           <div style={{ fontWeight: 600 }}>
             {parsed.title.trim() ? parsed.title.trim() : <span className="muted">Title required…</span>}
           </div>
           {parsed.tags.length > 0 && <TagChips tags={parsed.tags} compact />}
+          {linkInfo && (
+            <div className="row row--wrap" style={{ fontSize: 12 }}>
+              <span className="muted">{linkInfo.hostname}</span>
+              {suggestedTags.length > 0 && (
+                <button type="button" onClick={applySuggestedTags} className="chip chip--compact chip--clickable">
+                  Add #{suggestedTags.join(' #')}
+                </button>
+              )}
+              {!parsed.title.trim() && (
+                <button type="button" onClick={applySuggestedTitle} className="chip chip--compact chip--clickable">
+                  Use suggested title
+                </button>
+              )}
+            </div>
+          )}
           {body && (
             <div className="muted" style={{ fontSize: 12 }}>
               Notes: {body.slice(0, 120)}{body.length > 120 ? '…' : ''}
@@ -563,6 +662,13 @@ export default function Capture() {
             className="button button--ghost"
           >
             Copy capture link
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCopyLinkWithText()}
+            className="button button--ghost"
+          >
+            Copy link with text
           </button>
         </div>
 

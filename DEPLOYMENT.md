@@ -81,3 +81,6 @@ npm run dev
 ### Desktop (Chrome/Edge)
 1) Open the app.
 2) Click the install icon in the address bar.
+
+### iOS Shortcut
+- See `SHORTCUTS.md` for a share-sheet shortcut that opens `/capture?text=...`.

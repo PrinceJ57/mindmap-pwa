@@ -289,3 +289,8 @@ Acceptance criteria:
 - Added safe-area padding via CSS variables for notch/home-indicator devices.
 - Added capture templates, copy capture link, and recent item actions (pin/done/archive) on `/capture`.
 - Expanded `SMOKE_TEST.md` with safe-area and template checks.
+
+### Phase 6 part 2 changes (2026-01-29)
+- `/capture?text=` now prefills the capture box for shared content.
+- Link detection adds smart suggestions (#link + domain tag) and optional suggested title.
+- Added “Copy link with text” and documented iOS Shortcut flow in `SHORTCUTS.md`.
