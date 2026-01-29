@@ -373,6 +373,65 @@ textarea::placeholder {
   width: 100%;
 }
 
+.paletteQuickAdd {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.6);
+  display: grid;
+  gap: 10px;
+}
+
+.paletteQuickAddHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.paletteQuickAddTitle {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.paletteQuickAddRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.paletteQuickAddTitleValue {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.paletteQuickAddHint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.paletteQuickAddErrors,
+.paletteQuickAddWarnings {
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.paletteQuickAddErrors {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.16);
+}
+
+.paletteQuickAddWarnings {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.16);
+}
+
 .paletteNotice {
   margin-top: 10px;
   padding: 8px 12px;

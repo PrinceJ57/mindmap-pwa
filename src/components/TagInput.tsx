@@ -21,9 +21,18 @@ export default function TagInput({ value, onChange, placeholder }: TagInputProps
 
     async function loadTags() {
       setLoading(true)
+      const session = (await supabase.auth.getSession()).data.session
+      if (!session) {
+        if (active) {
+          setAvailableTags([])
+          setLoading(false)
+        }
+        return
+      }
       const { data, error } = await supabase
         .from('tags')
         .select('name')
+        .eq('owner_id', session.user.id)
         .order('name', { ascending: true })
 
       if (!active) return

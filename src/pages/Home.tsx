@@ -58,6 +58,8 @@ export default function Home() {
       setLoading(true)
       setErrorMessage(null)
 
+      const session = (await supabase.auth.getSession()).data.session
+
       const inboxPromise = supabase.rpc('list_nodes', {
         lim: PANEL_LIMIT,
         q: null,
@@ -103,10 +105,13 @@ export default function Home() {
         .select('id,name,filters')
         .order('name', { ascending: true })
 
-      const inboxCountPromise = supabase
-        .from('nodes')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'inbox')
+      const inboxCountPromise = session
+        ? supabase
+            .from('nodes')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'inbox')
+            .eq('owner_id', session.user.id)
+        : Promise.resolve({ data: null, error: null, count: null })
 
       const results = await Promise.all([
         inboxPromise,

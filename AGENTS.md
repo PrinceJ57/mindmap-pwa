@@ -158,3 +158,113 @@ Purpose: quick orientation for AI agents (Codex/LLMs) working in this repo.
   - Simulate offline (disable network) and create a Quick Add; see “Saved offline; will sync.” and queued count updates.
   - Open palette with empty query to ensure commands + recents still render.
   - Ensure existing capture, search, board, outline, review, import, and node detail flows still work.
+
+## Production readiness audit (2026-01-29)
+### What was inspected
+- `README.md`, `package.json`, `vercel.json`, `vite.config.ts`
+- App entrypoints: `src/main.tsx`, `src/App.tsx`, `src/supabaseClient.ts`
+- Auth/UI flows: `src/pages/Login.tsx`, `src/components/CommandPalette.tsx`, `src/pages/*`
+- Supabase access patterns: `src/lib/nodeWrites.ts`, `src/offlineQueue.ts`, `src/components/TagInput.tsx`
+- SQL migrations in `supabase/migrations/*`
+
+### Phase 1 plan (short)
+- Add `.env.example` + `DEPLOYMENT.md` for Vercel/Supabase envs and OAuth redirects.
+- Add base schema migrations for `nodes`, `tags`, `node_tags` with constraints + indexes.
+- Enable RLS + owner-scoped policies for the three tables.
+- Update this doc with changes, assumptions, and next prompt.
+
+### Phase 2 plan (short)
+- Review RLS policies for all user-owned tables and tighten where needed.
+- Add defense-in-depth owner scoping on high-risk client updates/queries.
+- Add `SECURITY.md` documenting keys, RLS model, threat model, and verification steps.
+
+### Current state summary
+- Stack: Vite + React + TypeScript, React Router (SPA), Supabase JS v2, Vite PWA plugin.
+- Entry + routing: `src/main.tsx` mounts `App` with `BrowserRouter`; routes gated client-side by Supabase session.
+- Auth flow: Google OAuth via `supabase.auth.signInWithOAuth`; redirect uses `VITE_SITE_URL` or `window.location.origin`. Supabase client uses PKCE + persisted session.
+- Data model (observed/assumed): `nodes` (owner_id, type, title, body, status, context, energy, duration_minutes, due_at, created_at, updated_at, pinned, review_after, search), `tags`, `node_tags` join, `edges` (links), `saved_views`.
+- RPCs in repo: `search_nodes`, `list_nodes`, `get_node_detail`, `get_node_links`, `set_node_status`, `set_node_pinned`, `set_node_review_after`, `create_edge`, `delete_edge`.
+- RLS in repo: `edges` + `saved_views` policies are defined; `nodes/tags/node_tags` policies are not present in this repo (referenced in `20260126_rls_policy_performance.sql` but not defined here).
+- Edge Functions: none found in repo; Quick Add uses client-side inserts via `createNodeWithTags`.
+- Quick Add flow: Command Palette → `parseQuickAdd()` → `createNodeWithTags()` → inserts into `nodes` + upserts `tags` + `node_tags` using client `session.user.id` as owner_id. Minimal validation (title required, due date token checked in parser).
+
+### Top 10 risks / gaps (impact + fix)
+1. Missing base schema + RLS migrations for `nodes/tags/node_tags` in repo → cannot reproduce/verify security; potential data leaks or blocked writes. Fix: add migrations or a schema export that includes tables + RLS + constraints.
+2. Client-side writes include `owner_id` (nodes/tags) → if RLS is missing/weak, any user can write as another user. Fix: enforce RLS `owner_id = auth.uid()` or move inserts into RPCs that use `auth.uid()`.
+3. Several client queries lack owner filters (e.g., `Home` count, `TagInput` load tags, `node_tags` queries) → rely entirely on RLS. Fix: tighten RLS and optionally add explicit owner filters in client queries.
+4. `NodeDetail` archive update only filters by `id` (no owner filter) → unsafe if RLS is misconfigured. Fix: add owner filter or use RPC with `auth.uid()`.
+5. No `.env.example` or deployment docs → Vercel/Supabase envs are tribal knowledge. Fix: add `.env.example` + `DEPLOYMENT.md`.
+6. OAuth redirect configuration not documented → Vercel preview/production URLs can break login. Fix: document `VITE_SITE_URL` + Supabase Auth redirect URLs.
+7. RLS performance migration references `node_reviews` table not in repo → schema drift risk. Fix: include missing migrations or remove unused references.
+8. Input constraints not visible in repo (status/type checks, length limits) → weak data hygiene if not in DB. Fix: add/check constraints in schema.
+9. Offline queue stores content in localStorage → privacy risk on shared devices. Fix: document risk or add optional “clear queue” / logout wipe.
+10. No SECURITY/DEPLOYMENT docs → hard to audit or repeat deployments. Fix: create docs in Phase 1/2.
+
+### Production plan (phased)
+Phase 1: Deployable MVP on Vercel
+- Add `.env.example` with `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_SITE_URL`.
+- Add `DEPLOYMENT.md` with Supabase + Vercel steps, build/output settings, and OAuth redirect URLs.
+- Verify Vercel settings: build `npm run build`, output `dist`, SPA rewrite (already in `vercel.json`).
+- Export or add missing base schema migrations (tables + constraints) so repo is reproducible.
+Acceptance criteria:
+- `npm install`, `npm run build` succeed.
+- Vercel deploy builds and loads `/login`.
+- Google OAuth redirects back to `/capture` on production URL.
+
+Phase 2: Security hardening
+- Confirm RLS enabled + correct for `nodes`, `tags`, `node_tags`, `edges`, `saved_views` (and any other tables).
+- Add/verify policies: select/insert/update/delete limited to `owner_id = auth.uid()`; `node_tags` should enforce ownership via joins to `nodes` + `tags`.
+- Review all client writes; ensure owner scoping is enforced by RLS or move to RPCs using `auth.uid()`.
+- Add DB constraints for `status`, `type`, non-null `title`, and length bounds.
+- Add `SECURITY.md` documenting RLS rules and key handling.
+Acceptance criteria:
+- Authenticated user cannot read/write another user’s rows (manual test in Supabase SQL editor).
+- All writes succeed without client-supplied owner_id cheating.
+
+Phase 3: UX polish (Quick Action)
+- Add a Quick Add preview row (parsed title/tags/status/type/due) before submit.
+- Show inline validation errors (missing title, invalid due date) without alert().
+- Add a small “token help” hint and a “clear” action.
+Acceptance criteria:
+- Command Palette shows a parsed preview when tokens are present.
+- Invalid tokens show friendly inline errors; Quick Add still works offline.
+
+### Verification notes
+- Local dev commands: `npm install`, `npm run dev`, `npm run build`.
+- Not executed in this audit; no failures observed from static review.
+- Expected Vercel settings: Framework “Vite”, Build `npm run build`, Output `dist`, SPA rewrite handled by `vercel.json`.
+
+### Next steps
+- Next best prompt: “Review Quick Add and Command Palette accessibility and add a small e2e smoke test checklist.”
+
+### Phase 1 changes (2026-01-29)
+- Added `.env.example` documenting required Vite env vars.
+- Added `DEPLOYMENT.md` with Vercel + Supabase setup, OAuth redirects, and rollback notes.
+- Added `supabase/migrations/20260129_base_nodes_tags.sql` with base tables, constraints, indexes, and RLS policies for `nodes`, `tags`, `node_tags`.
+
+### Assumptions made
+- `nodes`, `tags`, and `node_tags` did not have schema/RLS in repo and needed a base migration.
+- `nodes.id` and `tags.id` are `bigserial` to match existing RPC return types.
+- Tags are stored lowercase; constraint enforces `name = lower(name)`.
+
+### Phase 2 changes (2026-01-29)
+- Added `supabase/migrations/20260129_security_hardening.sql` to tighten `edges` policies and add `node_tags` update policy.
+- Added `SECURITY.md` documenting keys, RLS intent, threat model, and verification steps.
+- Added defense-in-depth owner scoping in `src/components/TagInput.tsx`, `src/pages/Home.tsx`, and `src/pages/NodeDetail.tsx`.
+
+### Phase 2 assumptions
+- Existing `edges` data should already be owner-consistent; tightened policies may hide inconsistent rows.
+- RLS remains the primary enforcement; client owner filters are supplementary.
+
+### Phase 3 changes (2026-01-29)
+- Added live Quick Add preview, inline validation, and token hint in `src/components/CommandPalette.tsx`.
+- Added supporting styles in `src/index.css`.
+
+### Quick Add token examples
+- `> Fix bathroom fan #renovation @home !active type:task due:2026-02-01`
+- `add Idea from book #reading @office !someday type:idea`
+- `> title:Replace mailbox #home !waiting`
+- `> Plan trip to Tokyo #travel due:2026-05-10`
+
+### Next recommended prompt
+- “Review Quick Add and Command Palette accessibility and add a small e2e smoke test checklist.”

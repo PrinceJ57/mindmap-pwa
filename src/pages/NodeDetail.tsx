@@ -345,10 +345,19 @@ export default function NodeDetail() {
     setStatus('archived')
     setSaving(true)
 
+    const session = (await supabase.auth.getSession()).data.session
+    if (!session) {
+      setSaving(false)
+      setStatus(previousStatus)
+      setSaveMessage('Not signed in.')
+      return
+    }
+
     const { error } = await supabase
       .from('nodes')
       .update({ status: 'archived' })
       .eq('id', node.id)
+      .eq('owner_id', session.user.id)
 
     if (error) {
       setSaving(false)

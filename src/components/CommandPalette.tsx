@@ -15,6 +15,7 @@ import { enqueuePayload, errorToString, shouldQueueError, type SaveNodeError } f
 import { createNodeWithTags, type NodeWritePayload } from '../lib/nodeWrites'
 import { parseQuickAdd } from '../lib/quickAddParse'
 import { addRecentNode, getRecentNodes, type RecentNode } from '../lib/recentNodes'
+import { STATUSES } from '../utils/status'
 
 type NodeResult = {
   id: number
@@ -55,6 +56,18 @@ type QuickAddMessage = {
 
 function normalizeTag(raw: string) {
   return raw.trim().toLowerCase()
+}
+
+function normalizeTokenValue(raw: string) {
+  return raw.trim().replace(/[.,;:!?]+$/g, '')
+}
+
+function isValidDueDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+}
+
+function tokenizeQuickAdd(input: string) {
+  return input.trim().split(/\s+/).filter(Boolean)
 }
 
 const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(function CommandPalette(
@@ -145,6 +158,54 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
 
   const quickAddTitle = parsedQuickAdd.title.trim()
   const searchTerm = quickAddEligible ? quickAddTitle : rawQuery
+
+  const quickAddValidation = useMemo(() => {
+    if (!quickAddEligible) return { errors: [] as string[], warnings: [] as string[] }
+    const tokens = tokenizeQuickAdd(quickAddInput)
+    const errors: string[] = []
+    const warnings: string[] = []
+
+    if (!quickAddTitle) {
+      errors.push('Title required.')
+    }
+
+    const invalidDueTokens = tokens
+      .filter(token => token.toLowerCase().startsWith('due:'))
+      .map(token => normalizeTokenValue(token.slice(4)))
+      .filter(value => !value || !isValidDueDate(value))
+
+    if (invalidDueTokens.length > 0) {
+      errors.push(`Invalid due date: ${invalidDueTokens.join(', ')}`)
+    }
+
+    const invalidTypeTokens = tokens
+      .filter(token => token.toLowerCase().startsWith('type:'))
+      .map(token => normalizeTokenValue(token.slice(5)).toLowerCase())
+      .filter(value => value && value !== 'idea' && value !== 'task')
+
+    if (invalidTypeTokens.length > 0) {
+      warnings.push(`Unknown type ignored: ${invalidTypeTokens.join(', ')}`)
+    }
+
+    const invalidStatusTokens = tokens
+      .filter(token => token.startsWith('!'))
+      .map(token => normalizeTokenValue(token.slice(1)).toLowerCase())
+      .filter(value => value && !(STATUSES as readonly string[]).includes(value))
+
+    if (invalidStatusTokens.length > 0) {
+      warnings.push(`Unknown status ignored: ${invalidStatusTokens.join(', ')}`)
+    }
+
+    const titleTokens = tokens.filter(token => token.toLowerCase().startsWith('title:'))
+    if (titleTokens.length > 0) {
+      const hasTitleValue = titleTokens.some(token => normalizeTokenValue(token.slice(6)))
+      if (!hasTitleValue) warnings.push('title: token needs text')
+    }
+
+    return { errors, warnings }
+  }, [quickAddEligible, quickAddInput, quickAddTitle])
+
+  const quickAddCanSubmit = quickAddEligible && quickAddValidation.errors.length === 0
 
   useEffect(() => {
     if (!open) return
@@ -245,10 +306,7 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
   ], [navigate])
 
   const runQuickAdd = useCallback(async () => {
-    if (!quickAddTitle) {
-      setQuickAddMessage({ tone: 'error', text: 'Title required.' })
-      return
-    }
+    if (!quickAddCanSubmit) return
 
     setQuickAddMessage(null)
     const session = (await supabase.auth.getSession()).data.session
@@ -296,7 +354,7 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
       }
       setQuickAddMessage({ tone: 'error', text: errorToString(saveError) })
     }
-  }, [parsedQuickAdd, quickAddTitle])
+  }, [parsedQuickAdd, quickAddTitle, quickAddCanSubmit])
 
   const quickAddItem = useMemo<PaletteItem | null>(() => {
     if (!quickAddEligible || !quickAddTitle) return null
@@ -453,6 +511,64 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
           className="input paletteInput"
           aria-label="Command palette search"
         />
+
+        {quickAddEligible && (
+          <div className="paletteQuickAdd">
+            <div className="paletteQuickAddHeader">
+              <span className="paletteQuickAddTitle">Quick Add preview</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery('')
+                  setQuickAddMessage(null)
+                  setSelectedIndex(0)
+                }}
+                className="chip chip--compact chip--clickable"
+              >
+                Clear
+              </button>
+            </div>
+
+            <div className="paletteQuickAddRow">
+              <span className="chip chip--compact">{parsedQuickAdd.type ?? 'idea'}</span>
+              <span className="chip chip--compact">{parsedQuickAdd.status ?? 'inbox'}</span>
+              {parsedQuickAdd.context && (
+                <span className="chip chip--compact">@{parsedQuickAdd.context}</span>
+              )}
+              {parsedQuickAdd.due_at && (
+                <span className="chip chip--compact">due {parsedQuickAdd.due_at}</span>
+              )}
+            </div>
+
+            <div className="paletteQuickAddTitleValue">
+              {quickAddTitle ? quickAddTitle : <span className="muted">Title required…</span>}
+            </div>
+
+            {parsedQuickAdd.tags.length > 0 && (
+              <TagChips tags={parsedQuickAdd.tags} compact />
+            )}
+
+            <div className="paletteQuickAddHint">
+              Tokens: `#tag` `@context` `!status` `type:task` `due:YYYY-MM-DD` `title:...`
+            </div>
+
+            {quickAddValidation.errors.length > 0 && (
+              <div className="paletteQuickAddErrors">
+                {quickAddValidation.errors.map(message => (
+                  <div key={message}>{message}</div>
+                ))}
+              </div>
+            )}
+
+            {quickAddValidation.warnings.length > 0 && (
+              <div className="paletteQuickAddWarnings">
+                {quickAddValidation.warnings.map(message => (
+                  <div key={message}>{message}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {quickAddMessage && (
           <div className={`paletteNotice paletteNotice--${quickAddMessage.tone}`}>
