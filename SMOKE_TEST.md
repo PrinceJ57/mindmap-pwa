@@ -21,6 +21,8 @@ Run this after any change before deploy.
 - Tap a capture template (Task/Idea/Waiting) and verify tokens appear in the input.
 - Visit `/capture?text=https://youtube.com/watch?v=123` and confirm the input prefills.
 - Confirm “link detected” appears and “Add #link #youtube” suggestion works.
+- Visit `/capture?text=rtl-sdr.com&source=ios_share` and confirm it normalizes to `https://rtl-sdr.com`.
+- Visit `/capture?text=https://example.com&source=ios_share&autosave=1` and confirm it auto-saves once.
 
 ## iOS safe-area
 - In standalone mode, verify nav buttons and Capture header are fully visible and not under the notch.

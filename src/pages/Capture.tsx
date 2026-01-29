@@ -56,18 +56,50 @@ function splitInput(raw: string) {
   return { headline, body }
 }
 
+function looksLikeBareDomain(value: string) {
+  if (!value) return false
+  if (value.startsWith('http://') || value.startsWith('https://')) return false
+  if (value.includes(' ')) return false
+  return /^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+([/?#][^\s]*)?$/i.test(value)
+}
+
+function normalizeSharedText(input: string) {
+  const { headline, body } = splitInput(input)
+  const trimmedHeadline = headline.trim()
+  if (looksLikeBareDomain(trimmedHeadline)) {
+    const nextHeadline = `https://${trimmedHeadline}`
+    return body ? `${nextHeadline}\n${body}` : nextHeadline
+  }
+  return input
+}
+
+function ensureSharedTag(input: string) {
+  const { headline, body } = splitInput(input)
+  const hasTag = /(^|\s)#shared_ios(\s|$)/i.test(headline)
+  if (hasTag) return input
+  const nextHeadline = headline.trim() ? `${headline.trim()} #shared_ios` : '#shared_ios'
+  return body ? `${nextHeadline}\n${body}` : nextHeadline
+}
+
 function buildPrefillInput() {
   const search = window.location.search
   const rawParams = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
+  const source = rawParams.get('source') ?? ''
+  const isShared = source === 'ios_share'
+  const autosave = rawParams.get('autosave') === '1'
   const textParam = rawParams.get('text')
   if (textParam && textParam.trim()) {
-    const decoded = textParam.replace(/\+/g, ' ')
+    let decoded = textParam.replace(/\+/g, ' ')
+    if (isShared) {
+      decoded = normalizeSharedText(decoded)
+      decoded = ensureSharedTag(decoded)
+    }
     window.sessionStorage.removeItem(CAPTURE_PREFILL_STORAGE_KEY)
     if (search) {
       const next = window.location.pathname + window.location.hash
       window.history.replaceState(null, '', next)
     }
-    return { text: decoded, prefilled: true }
+    return { text: decoded, prefilled: true, autosave, isShared }
   }
   let prefill = parsePrefillParams(search)
 
@@ -81,15 +113,22 @@ function buildPrefillInput() {
     }
   }
 
-  if (!prefill.hasPrefill) return { text: '', prefilled: false }
+  if (!prefill.hasPrefill) return { text: '', prefilled: false, autosave: false, isShared: false }
+
+  const baseTags = isShared
+    ? prefill.tags.filter(tag => tag !== 'dictated')
+    : prefill.tags
+  const tags = isShared
+    ? (baseTags.includes('shared_ios') ? baseTags : [...baseTags, 'shared_ios'])
+    : baseTags
 
   const tokens: string[] = []
   if (prefill.title) tokens.push(prefill.title)
   if (prefill.context) tokens.push(`@${prefill.context}`)
   if (prefill.status) tokens.push(`!${prefill.status}`)
   if (prefill.type) tokens.push(`type:${prefill.type}`)
-  if (prefill.tags.length > 0) {
-    tokens.push(...prefill.tags.map(tag => `#${tag}`))
+  if (tags.length > 0) {
+    tokens.push(...tags.map(tag => `#${tag}`))
   }
 
   const headline = tokens.join(' ').trim()
@@ -102,7 +141,7 @@ function buildPrefillInput() {
     window.history.replaceState(null, '', next)
   }
 
-  return { text, prefilled: true }
+  return { text, prefilled: true, autosave, isShared }
 }
 
 function buildCaptureUrl(options: {
@@ -124,9 +163,11 @@ function buildCaptureUrl(options: {
 }
 
 function extractFirstUrl(text: string) {
-  const match = text.match(/https?:\/\/[^\s]+/i) ?? text.match(/www\.[^\s]+/i)
+  const match = text.match(/https?:\/\/[^\s]+/i)
+    ?? text.match(/www\.[^\s]+/i)
+    ?? text.match(/(^|[\s(])((?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s]*)?)/i)
   if (!match) return null
-  const raw = match[0]
+  const raw = match[2] ?? match[0]
   const withScheme = raw.startsWith('http') ? raw : `https://${raw}`
   try {
     return new URL(withScheme)
@@ -147,6 +188,8 @@ export default function Capture() {
   const [saveMessage, setSaveMessage] = useState<SaveMessage | null>(null)
   const [saving, setSaving] = useState(false)
   const [prefilled, setPrefilled] = useState(false)
+  const [autosaveRequested, setAutosaveRequested] = useState(false)
+  const [sharePrefill, setSharePrefill] = useState(false)
   const [queueCount, setQueueCount] = useState(0)
   const [syncing, setSyncing] = useState(false)
   const [recent, setRecent] = useState<RecentRow[]>([])
@@ -155,6 +198,8 @@ export default function Capture() {
   const [installDismissed, setInstallDismissed] = useState(false)
   const [online, setOnline] = useState(true)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const autosaveOnceRef = useRef(false)
+  const autoTitleRef = useRef(false)
   const navigate = useNavigate()
 
   const { headline, body } = useMemo(() => splitInput(rawInput), [rawInput])
@@ -268,12 +313,40 @@ export default function Capture() {
   }, [])
 
   useEffect(() => {
-    const { text, prefilled } = buildPrefillInput()
+    const { text, prefilled, autosave, isShared } = buildPrefillInput()
     if (prefilled && text) {
       setRawInput(text)
       setPrefilled(true)
     }
+    setAutosaveRequested(autosave)
+    setSharePrefill(isShared)
+    autosaveOnceRef.current = false
+    autoTitleRef.current = false
   }, [])
+
+  useEffect(() => {
+    if (!sharePrefill) return
+    if (autoTitleRef.current) return
+    if (parsed.title.trim()) return
+    const fallbackLine = body.split(/\r?\n/)[0]?.trim() ?? ''
+    const candidate = linkInfo?.suggestedTitle ?? fallbackLine
+    if (!candidate) return
+    autoTitleRef.current = true
+    setRawInput(prev => {
+      const { headline, body } = splitInput(prev)
+      const trimmedHeadline = headline.trim()
+      const nextHeadline = trimmedHeadline ? `${candidate} ${trimmedHeadline}` : candidate
+      return body ? `${nextHeadline}\n${body}` : nextHeadline
+    })
+  }, [sharePrefill, parsed.title, linkInfo, body])
+
+  useEffect(() => {
+    if (!autosaveRequested) return
+    if (autosaveOnceRef.current) return
+    if (!canSubmit) return
+    autosaveOnceRef.current = true
+    void handleSave()
+  }, [autosaveRequested, canSubmit])
 
   const loadRecent = useCallback(async () => {
     setRecentLoading(true)
