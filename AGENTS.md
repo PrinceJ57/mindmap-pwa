@@ -278,3 +278,9 @@ Acceptance criteria:
 - Improved Command Palette accessibility (focus restore, dialog semantics, live regions, visible focus).
 - Added `SMOKE_TEST.md` with a 10-minute checklist and release ritual.
 - Added a brief release ritual to `DEPLOYMENT.md`.
+
+### Phase 5 changes (2026-01-29)
+- Reworked `/capture` into a mobile-first Quick Add page with preview, validation, and recent list.
+- Added offline/queue indicators and manual sync affordance on `/capture`.
+- Added install hint UX and iOS-friendly meta tags; manifest now opens at `/capture`.
+- Documented “Install as an app” steps in `DEPLOYMENT.md`.

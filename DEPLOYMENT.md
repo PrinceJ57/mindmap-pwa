@@ -67,3 +67,17 @@ npm run dev
 1) `npm run build`
 2) Run `SMOKE_TEST.md`
 3) Deploy
+
+## Install as an app
+### iOS (Safari)
+1) Open the app in Safari.
+2) Tap the Share button.
+3) Choose “Add to Home Screen”.
+
+### Android (Chrome)
+1) Open the app in Chrome.
+2) Tap the install prompt (or menu → “Install app”).
+
+### Desktop (Chrome/Edge)
+1) Open the app.
+2) Click the install icon in the address bar.

@@ -1,93 +1,276 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import TagInput from '../components/TagInput'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import TagChips from '../components/TagChips'
 import { supabase } from '../supabaseClient'
-import { enqueuePayload, errorToString, shouldQueueError, type SaveNodeError } from '../offlineQueue'
-import { createNodeWithTags, type Energy, type NodeType, type NodeWritePayload } from '../lib/nodeWrites'
+import { enqueuePayload, errorToString, getQueueCount, onQueueUpdate, shouldQueueError, syncOfflineQueue, type SaveNodeError } from '../offlineQueue'
+import { createNodeWithTags, type NodeWritePayload } from '../lib/nodeWrites'
+import { parseQuickAdd } from '../lib/quickAddParse'
 import { CAPTURE_PREFILL_STORAGE_KEY, parsePrefillParams } from '../lib/queryPrefill'
-import { STATUSES, type Status } from '../utils/status'
+import { STATUSES } from '../utils/status'
 
-type SaveMessage = { tone: 'success' | 'offline'; text: string }
+type SaveMessage = { tone: 'success' | 'offline' | 'error'; text: string }
 
-export default function Capture() {
-  const [type, setType] = useState<NodeType>('idea')
-  const [status, setStatus] = useState<Status>('inbox')
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
-  const [tags, setTags] = useState<string[]>([])
-  const [context, setContext] = useState('')
-  const [energy, setEnergy] = useState<Energy>('medium')
-  const [durationMinutes, setDurationMinutes] = useState<number | ''>('')
-  const [saveMessage, setSaveMessage] = useState<SaveMessage | null>(null)
-  const [prefilled, setPrefilled] = useState(false)
-  const prefillAppliedRef = useRef(false)
+type RecentRow = {
+  id: number
+  title: string
+  type: string
+  status: string
+  created_at: string
+  updated_at?: string | null
+  tags?: string[] | null
+}
 
-  const removeQueryFromUrl = useCallback(() => {
-    const next = window.location.pathname + window.location.hash
-    window.history.replaceState(null, '', next)
-  }, [])
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
 
-  const clearForm = () => {
-    setType('idea')
-    setStatus('inbox')
-    setTitle('')
-    setBody('')
-    setTags([])
-    setContext('')
-    setEnergy('medium')
-    setDurationMinutes('')
-    setSaveMessage(null)
-    setPrefilled(false)
-    window.sessionStorage.removeItem(CAPTURE_PREFILL_STORAGE_KEY)
-    removeQueryFromUrl()
-  }
+const INSTALL_DISMISS_KEY = 'mm_install_hint_dismissed'
 
-  useEffect(() => {
-    if (prefillAppliedRef.current) return
+function tokenize(input: string) {
+  return input.trim().split(/\s+/).filter(Boolean)
+}
 
-    const search = window.location.search
-    let prefill = parsePrefillParams(search)
+function normalizeTokenValue(raw: string) {
+  return raw.trim().replace(/[.,;:!?]+$/g, '')
+}
 
-    if (!prefill.hasPrefill) {
-      const stored = window.sessionStorage.getItem(CAPTURE_PREFILL_STORAGE_KEY)
-      if (stored) {
-        prefill = parsePrefillParams(stored)
-        if (!prefill.hasPrefill) {
-          window.sessionStorage.removeItem(CAPTURE_PREFILL_STORAGE_KEY)
-        }
+function isValidDueDate(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+}
+
+function splitInput(raw: string) {
+  const parts = raw.split(/\r?\n/)
+  const headline = parts[0] ?? ''
+  const body = parts.slice(1).join('\n').trim()
+  return { headline, body }
+}
+
+function buildPrefillInput() {
+  const search = window.location.search
+  let prefill = parsePrefillParams(search)
+
+  if (!prefill.hasPrefill) {
+    const stored = window.sessionStorage.getItem(CAPTURE_PREFILL_STORAGE_KEY)
+    if (stored) {
+      prefill = parsePrefillParams(stored)
+      if (!prefill.hasPrefill) {
+        window.sessionStorage.removeItem(CAPTURE_PREFILL_STORAGE_KEY)
       }
     }
+  }
 
-    if (!prefill.hasPrefill) return
+  if (!prefill.hasPrefill) return { text: '', prefilled: false }
 
-    prefillAppliedRef.current = true
-    setType(prefill.type ?? 'idea')
-    setStatus(prefill.status ?? 'inbox')
-    setTitle(prefill.title)
-    setBody(prefill.body)
-    setTags(prefill.tags)
-    setContext(prefill.context)
-    setPrefilled(true)
-    window.sessionStorage.removeItem(CAPTURE_PREFILL_STORAGE_KEY)
-    if (search) removeQueryFromUrl()
-  }, [removeQueryFromUrl])
+  const tokens: string[] = []
+  if (prefill.title) tokens.push(prefill.title)
+  if (prefill.context) tokens.push(`@${prefill.context}`)
+  if (prefill.status) tokens.push(`!${prefill.status}`)
+  if (prefill.type) tokens.push(`type:${prefill.type}`)
+  if (prefill.tags.length > 0) {
+    tokens.push(...prefill.tags.map(tag => `#${tag}`))
+  }
 
-  async function save() {
+  const headline = tokens.join(' ').trim()
+  const body = prefill.body.trim()
+  const text = body ? `${headline}\n${body}`.trim() : headline
+
+  window.sessionStorage.removeItem(CAPTURE_PREFILL_STORAGE_KEY)
+  if (search) {
+    const next = window.location.pathname + window.location.hash
+    window.history.replaceState(null, '', next)
+  }
+
+  return { text, prefilled: true }
+}
+
+export default function Capture() {
+  const [rawInput, setRawInput] = useState('')
+  const [saveMessage, setSaveMessage] = useState<SaveMessage | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [prefilled, setPrefilled] = useState(false)
+  const [queueCount, setQueueCount] = useState(0)
+  const [syncing, setSyncing] = useState(false)
+  const [recent, setRecent] = useState<RecentRow[]>([])
+  const [recentLoading, setRecentLoading] = useState(false)
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+  const [installDismissed, setInstallDismissed] = useState(false)
+  const [online, setOnline] = useState(true)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+
+  const { headline, body } = useMemo(() => splitInput(rawInput), [rawInput])
+  const parsed = useMemo(() => parseQuickAdd(headline), [headline])
+
+  const validation = useMemo(() => {
+    const tokens = tokenize(headline)
+    const errors: string[] = []
+    const warnings: string[] = []
+
+    if (!parsed.title.trim()) {
+      errors.push('Title required.')
+    }
+
+    const invalidDueTokens = tokens
+      .filter(token => token.toLowerCase().startsWith('due:'))
+      .map(token => normalizeTokenValue(token.slice(4)))
+      .filter(value => !value || !isValidDueDate(value))
+
+    if (invalidDueTokens.length > 0) {
+      errors.push(`Invalid due date: ${invalidDueTokens.join(', ')}`)
+    }
+
+    const invalidTypeTokens = tokens
+      .filter(token => token.toLowerCase().startsWith('type:'))
+      .map(token => normalizeTokenValue(token.slice(5)).toLowerCase())
+      .filter(value => value && value !== 'idea' && value !== 'task')
+
+    if (invalidTypeTokens.length > 0) {
+      warnings.push(`Unknown type ignored: ${invalidTypeTokens.join(', ')}`)
+    }
+
+    const invalidStatusTokens = tokens
+      .filter(token => token.startsWith('!'))
+      .map(token => normalizeTokenValue(token.slice(1)).toLowerCase())
+      .filter(value => value && !(STATUSES as readonly string[]).includes(value))
+
+    if (invalidStatusTokens.length > 0) {
+      warnings.push(`Unknown status ignored: ${invalidStatusTokens.join(', ')}`)
+    }
+
+    const titleTokens = tokens.filter(token => token.toLowerCase().startsWith('title:'))
+    if (titleTokens.length > 0) {
+      const hasTitleValue = titleTokens.some(token => normalizeTokenValue(token.slice(6)))
+      if (!hasTitleValue) warnings.push('title: token needs text')
+    }
+
+    return { errors, warnings }
+  }, [headline, parsed.title])
+
+  const canSubmit = validation.errors.length === 0 && parsed.title.trim() !== '' && !saving
+
+  useEffect(() => {
+    inputRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    const stored = localStorage.getItem(INSTALL_DISMISS_KEY)
+    if (!stored) return
+    const lastDismissed = Number(stored)
+    if (!Number.isNaN(lastDismissed) && Date.now() - lastDismissed < 7 * 24 * 60 * 60 * 1000) {
+      setInstallDismissed(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const promptEvent = event as BeforeInstallPromptEvent
+      promptEvent.preventDefault()
+      setInstallPrompt(promptEvent)
+    }
+
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  useEffect(() => {
+    const updateQueue = () => setQueueCount(getQueueCount())
+    updateQueue()
+    return onQueueUpdate(updateQueue)
+  }, [])
+
+  useEffect(() => {
+    const updateOnline = () => setOnline(navigator.onLine)
+    updateOnline()
+    window.addEventListener('online', updateOnline)
+    window.addEventListener('offline', updateOnline)
+    return () => {
+      window.removeEventListener('online', updateOnline)
+      window.removeEventListener('offline', updateOnline)
+    }
+  }, [])
+
+  useEffect(() => {
+    const { text, prefilled } = buildPrefillInput()
+    if (prefilled && text) {
+      setRawInput(text)
+      setPrefilled(true)
+    }
+  }, [])
+
+  const loadRecent = useCallback(async () => {
+    setRecentLoading(true)
+    const { data, error } = await supabase.rpc('list_nodes', {
+      lim: 20,
+      q: null,
+      type_filter: null,
+      status_filter: null,
+      tag_filter: null,
+      pinned_only: false,
+      review_due_only: false,
+    })
+
+    if (error) {
+      setRecent([])
+      setRecentLoading(false)
+      return
+    }
+
+    const rows = (data ?? []) as RecentRow[]
+    setRecent(rows)
+    setRecentLoading(false)
+  }, [])
+
+  useEffect(() => {
+    void loadRecent()
+  }, [loadRecent])
+
+  const dismissInstallHint = () => {
+    localStorage.setItem(INSTALL_DISMISS_KEY, String(Date.now()))
+    setInstallDismissed(true)
+  }
+
+  const isStandalone = typeof window !== 'undefined'
+    && (window.matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone)
+
+  const isIos = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const showInstallHint = !installDismissed && !isStandalone && (installPrompt || isIos)
+
+  async function runSync() {
+    if (syncing || queueCount === 0) return
+    setSyncing(true)
+    try {
+      await syncOfflineQueue({ supabase, maxItems: 10 })
+    } finally {
+      setSyncing(false)
+      setQueueCount(getQueueCount())
+    }
+  }
+
+  async function handleSave() {
+    if (!canSubmit) {
+      setSaveMessage({ tone: 'error', text: 'Fix the Quick Add errors before saving.' })
+      return
+    }
+
+    setSaving(true)
     setSaveMessage(null)
-    const session = (await supabase.auth.getSession()).data.session
-    if (!session) return alert('Not signed in.')
 
-    if (!title.trim()) return alert('Title required.')
+    const session = (await supabase.auth.getSession()).data.session
+    if (!session) {
+      setSaving(false)
+      setSaveMessage({ tone: 'error', text: 'Not signed in.' })
+      return
+    }
 
     const payload: NodeWritePayload = {
-      type,
-      title: title.trim(),
-      body,
-      tags,
-      status,
-      context: context.trim() ? context.trim() : null,
-      energy: type === 'task' ? energy : null,
-      duration_minutes: type === 'task' && durationMinutes !== '' ? durationMinutes : null,
-      due_at: null,
+      type: parsed.type ?? 'idea',
+      title: parsed.title.trim(),
+      body: body,
+      tags: parsed.tags,
+      status: parsed.status ?? 'inbox',
+      context: parsed.context ? parsed.context : null,
+      energy: null,
+      duration_minutes: null,
+      due_at: parsed.due_at ?? null,
     }
 
     try {
@@ -98,32 +281,52 @@ export default function Capture() {
         allowPartialTags: false,
       })
 
-      setTitle('')
-      setBody('')
-      setTags([])
-      setContext('')
-      setDurationMinutes('')
+      setRawInput('')
       setSaveMessage({ tone: 'success', text: 'Saved ✅' })
+      void loadRecent()
     } catch (error) {
       const saveError = error as SaveNodeError
       const shouldQueue = saveError.stage !== 'tag' && shouldQueueError(saveError.original ?? saveError)
       if (shouldQueue) {
         enqueuePayload(payload, errorToString(saveError))
-        setTitle('')
-        setBody('')
-        setTags([])
-        setContext('')
-        setDurationMinutes('')
-        setSaveMessage({ tone: 'offline', text: 'Saved offline; will sync.' })
+        setRawInput('')
+        setSaveMessage({ tone: 'offline', text: 'Queued offline; will sync.' })
+        setQueueCount(getQueueCount())
         return
       }
-      alert(errorToString(saveError))
+      setSaveMessage({ tone: 'error', text: errorToString(saveError) })
+    } finally {
+      setSaving(false)
     }
   }
 
   return (
-    <div className="stack">
-      <h2>Capture</h2>
+    <div className="stack capturePage">
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <div className="stack-sm">
+          <h2>Capture</h2>
+          <span className="muted" style={{ fontSize: 12 }}>Quick entry with tokens. Shift+Enter for notes.</span>
+        </div>
+        <div className="row row--wrap">
+          {queueCount > 0 && (
+            <span className="badge">Queued: {queueCount}</span>
+          )}
+          <button
+            type="button"
+            onClick={() => void runSync()}
+            disabled={syncing || queueCount === 0}
+            className="button button--ghost"
+          >
+            {syncing ? 'Syncing…' : 'Sync now'}
+          </button>
+        </div>
+      </div>
+
+      {!online && (
+        <div className="card" style={{ borderColor: 'rgba(245, 158, 11, 0.6)', background: 'rgba(245, 158, 11, 0.12)' }}>
+          Offline mode: captures will be queued and synced when you’re back online.
+        </div>
+      )}
 
       {prefilled && (
         <div
@@ -131,101 +334,185 @@ export default function Capture() {
           style={{ background: 'rgba(37, 99, 235, 0.15)', borderColor: 'rgba(37, 99, 235, 0.45)' }}
         >
           <span>Prefilled from Shortcut</span>
-          <button onClick={clearForm} className="button button--ghost">Clear</button>
-          <button onClick={removeQueryFromUrl} className="button button--ghost">Remove query from URL</button>
+          <button
+            onClick={() => setRawInput('')}
+            className="button button--ghost"
+          >
+            Clear
+          </button>
         </div>
       )}
 
-      <div className="row row--wrap">
-        <button
-          onClick={() => setType('idea')}
-          disabled={type === 'idea'}
-          className={`button ${type === 'idea' ? 'button--primary' : 'button--ghost'}`}
-        >
-          Idea
-        </button>
-        <button
-          onClick={() => setType('task')}
-          disabled={type === 'task'}
-          className={`button ${type === 'task' ? 'button--primary' : 'button--ghost'}`}
-        >
-          Task
-        </button>
+      {showInstallHint && (
+        <div className="card installHint">
+          <div className="stack-sm">
+            <strong>Install Mindmap</strong>
+            {installPrompt && (
+              <span className="muted" style={{ fontSize: 12 }}>
+                Install this app for a fast, standalone experience.
+              </span>
+            )}
+            {installPrompt && (
+              <div className="row row--wrap">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await installPrompt.prompt()
+                    const choice = await installPrompt.userChoice
+                    if (choice.outcome === 'accepted') {
+                      setInstallPrompt(null)
+                      setInstallDismissed(true)
+                    }
+                  }}
+                  className="button button--primary"
+                >
+                  Install
+                </button>
+                <button type="button" onClick={dismissInstallHint} className="button button--ghost">
+                  Not now
+                </button>
+              </div>
+            )}
+            {!installPrompt && isIos && (
+              <div className="stack-sm">
+                <span className="muted" style={{ fontSize: 12 }}>
+                  On iOS: tap Share, then “Add to Home Screen”.
+                </span>
+                <button type="button" onClick={dismissInstallHint} className="button button--ghost">
+                  Got it
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="card captureComposer">
+        <textarea
+          ref={inputRef}
+          value={rawInput}
+          onChange={(event) => {
+            setRawInput(event.target.value)
+            if (saveMessage) setSaveMessage(null)
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+              if (canSubmit) {
+                event.preventDefault()
+                void handleSave()
+              }
+            }
+          }}
+          placeholder="What’s on your mind? Use #tags, @context, !status, type:task, due:YYYY-MM-DD"
+          rows={5}
+          className="textarea captureInput"
+          aria-label="Quick capture input"
+        />
+
+        <div className="capturePreview">
+          <div className="row row--wrap">
+            <span className="chip chip--compact">{parsed.type ?? 'idea'}</span>
+            <span className="chip chip--compact">{parsed.status ?? 'inbox'}</span>
+            {parsed.context && <span className="chip chip--compact">@{parsed.context}</span>}
+            {parsed.due_at && <span className="chip chip--compact">due {parsed.due_at}</span>}
+          </div>
+          <div style={{ fontWeight: 600 }}>
+            {parsed.title.trim() ? parsed.title.trim() : <span className="muted">Title required…</span>}
+          </div>
+          {parsed.tags.length > 0 && <TagChips tags={parsed.tags} compact />}
+          {body && (
+            <div className="muted" style={{ fontSize: 12 }}>
+              Notes: {body.slice(0, 120)}{body.length > 120 ? '…' : ''}
+            </div>
+          )}
+          {validation.errors.length > 0 && (
+            <div className="captureErrors" role="alert">
+              <strong>Errors</strong>
+              {validation.errors.map(message => (
+                <div key={message}>{message}</div>
+              ))}
+            </div>
+          )}
+          {validation.warnings.length > 0 && (
+            <div className="captureWarnings" role="status" aria-live="polite">
+              <strong>Warnings</strong>
+              {validation.warnings.map(message => (
+                <div key={message}>{message}</div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="row row--wrap">
+          <button
+            onClick={() => void handleSave()}
+            className="button button--primary"
+            disabled={!canSubmit}
+            style={{ flex: '1 1 160px' }}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setRawInput('')}
+            className="button button--ghost"
+          >
+            Clear
+          </button>
+        </div>
+
+        {saveMessage && (
+          <div
+            role="status"
+            className="card"
+            style={{
+              background: saveMessage.tone === 'offline'
+                ? 'rgba(245, 158, 11, 0.16)'
+                : saveMessage.tone === 'error'
+                  ? 'rgba(248, 113, 113, 0.16)'
+                  : 'rgba(16, 185, 129, 0.16)',
+              borderColor: saveMessage.tone === 'offline'
+                ? 'rgba(245, 158, 11, 0.4)'
+                : saveMessage.tone === 'error'
+                  ? 'rgba(248, 113, 113, 0.4)'
+                  : 'rgba(16, 185, 129, 0.4)',
+            }}
+          >
+            {saveMessage.text}
+          </div>
+        )}
       </div>
 
-      <select
-        value={status}
-        onChange={(e) => setStatus(e.target.value as Status)}
-        className="select"
-      >
-        {STATUSES.map((value) => (
-          <option key={value} value={value}>
-            {value}
-          </option>
-        ))}
-      </select>
-
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="Title"
-        className="input"
-      />
-
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        placeholder="Details…"
-        rows={6}
-        className="textarea"
-      />
-
-      <TagInput value={tags} onChange={setTags} placeholder="Add tags" />
-
-      <input
-        value={context}
-        onChange={(e) => setContext(e.target.value)}
-        placeholder="context (home/shop/computer/errands)"
-        className="input"
-      />
-
-      {type === 'task' && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <input
-            value={durationMinutes}
-            onChange={(e) => setDurationMinutes(e.target.value ? Number(e.target.value) : '')}
-            placeholder="duration (min)"
-            inputMode="numeric"
-            className="input"
-          />
-          <select
-            value={energy}
-            onChange={(e) => setEnergy(e.target.value as Energy)}
-            className="select"
-          >
-            <option value="low">low energy</option>
-            <option value="medium">medium energy</option>
-            <option value="high">high energy</option>
-          </select>
+      <section className="card captureRecent">
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <strong>Recent captures</strong>
+          <button type="button" className="button button--ghost" onClick={() => void loadRecent()}>
+            Refresh
+          </button>
         </div>
-      )}
-
-      <button onClick={save} className="button button--primary" style={{ width: '100%' }}>
-        Save
-      </button>
-
-      {saveMessage && (
-        <div
-          role="status"
-          className="card"
-          style={{
-            background: saveMessage.tone === 'offline' ? 'rgba(245, 158, 11, 0.16)' : 'rgba(16, 185, 129, 0.16)',
-            borderColor: saveMessage.tone === 'offline' ? 'rgba(245, 158, 11, 0.4)' : 'rgba(16, 185, 129, 0.4)',
-          }}
-        >
-          {saveMessage.text}
-        </div>
-      )}
+        {recentLoading && <span className="muted" style={{ fontSize: 12 }}>Loading…</span>}
+        {!recentLoading && recent.length === 0 && (
+          <span className="muted" style={{ fontSize: 12 }}>No recent captures yet.</span>
+        )}
+        {recent.length > 0 && (
+          <div className="stack-sm">
+            {recent.map(row => (
+              <div key={row.id} className="captureRecentItem">
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: 600 }}>{row.title}</span>
+                  <span className="muted" style={{ fontSize: 12 }}>{row.type}</span>
+                </div>
+                <div className="row row--wrap">
+                  <span className="chip chip--compact">{row.status}</span>
+                  {Array.isArray(row.tags) && row.tags.length > 0 && (
+                    <TagChips tags={row.tags} compact />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

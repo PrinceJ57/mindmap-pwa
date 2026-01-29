@@ -14,6 +14,11 @@ Run this after any change before deploy.
 - Type: `> Fix bathroom fan #renovation @home !active type:task due:2026-02-01`
 - Press Enter → “Created” message; node exists in Search.
 
+## Mobile Capture (/capture)
+- Open `/capture` and enter: `Buy batteries #errands !inbox`.
+- Press Enter to save; confirm “Saved ✅”.
+- Go offline and repeat; confirm “Queued offline; will sync.”
+
 ## Capture + Tags
 - Create a node in `/capture` with tags.
 - Confirm tags show up in TagInput suggestions later.
