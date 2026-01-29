@@ -208,6 +208,16 @@ textarea::placeholder {
   cursor: not-allowed;
 }
 
+.button:focus-visible,
+.chip--clickable:focus-visible,
+.paletteItem:focus-visible,
+.input:focus-visible,
+.select:focus-visible,
+.textarea:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.9);
+  outline-offset: 2px;
+}
+
 .button--primary {
   background: var(--accent);
   border-color: var(--accent);

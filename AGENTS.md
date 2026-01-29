@@ -273,3 +273,8 @@ Acceptance criteria:
 - Root cause: two `public.list_nodes` overloads (5-arg and 7-arg) caused ambiguous RPC resolution.
 - Fix: added `supabase/migrations/20260129_list_nodes_canonical.sql` to drop the 5-arg signature and re-define the 7-arg canonical version.
 - Client calls now pass `pinned_only` and `review_due_only` explicitly where missing.
+
+### Phase 4 changes (2026-01-29)
+- Improved Command Palette accessibility (focus restore, dialog semantics, live regions, visible focus).
+- Added `SMOKE_TEST.md` with a 10-minute checklist and release ritual.
+- Added a brief release ritual to `DEPLOYMENT.md`.

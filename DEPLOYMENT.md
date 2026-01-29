@@ -62,3 +62,8 @@ npm run dev
 - Create a node in `/capture`.
 - Add a tag; verify tags autocomplete on subsequent edits.
 - Search for the node and open its detail view.
+
+## Release ritual (quick)
+1) `npm run build`
+2) Run `SMOKE_TEST.md`
+3) Deploy

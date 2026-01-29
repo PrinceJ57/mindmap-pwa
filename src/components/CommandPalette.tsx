@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -83,7 +84,12 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
   const [recents, setRecents] = useState<RecentNode[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const lastFocusedRef = useRef<HTMLElement | null>(null)
   const navigate = useNavigate()
+  const quickAddHintId = useId()
+  const quickAddErrorId = useId()
+  const quickAddWarningId = useId()
+  const quickAddMessageId = useId()
 
   const openPalette = useCallback(() => {
     if (!enabled) return
@@ -97,6 +103,9 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
     setLoading(false)
     setErrorMessage(null)
     setQuickAddMessage(null)
+    if (lastFocusedRef.current) {
+      lastFocusedRef.current.focus()
+    }
   }, [])
 
   useImperativeHandle(ref, () => ({ open: openPalette }), [openPalette])
@@ -126,6 +135,7 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
 
   useEffect(() => {
     if (!open) return
+    lastFocusedRef.current = document.activeElement as HTMLElement | null
     setSelectedIndex(0)
     setRecents(getRecentNodes())
     const handle = window.setTimeout(() => {
@@ -306,7 +316,10 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
   ], [navigate])
 
   const runQuickAdd = useCallback(async () => {
-    if (!quickAddCanSubmit) return
+    if (!quickAddCanSubmit) {
+      setQuickAddMessage({ tone: 'error', text: 'Fix Quick Add errors before submitting.' })
+      return
+    }
 
     setQuickAddMessage(null)
     const session = (await supabase.auth.getSession()).data.session
@@ -485,10 +498,22 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
   if (!enabled || !open) return null
 
   let itemIndex = -1
+  const inputDescribedBy = [
+    quickAddEligible ? quickAddHintId : null,
+    quickAddValidation.errors.length > 0 ? quickAddErrorId : null,
+    quickAddValidation.warnings.length > 0 ? quickAddWarningId : null,
+    quickAddMessage ? quickAddMessageId : null,
+  ].filter(Boolean).join(' ') || undefined
 
   return (
     <div className="modalOverlay" onClick={closePalette}>
-      <div className="modalPanel palettePanel" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="modalPanel palettePanel"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="command-palette-title"
+      >
         <div className="paletteHeader">
           <h3 id="command-palette-title">Command Palette</h3>
           <span className="chip chip--compact">Esc</span>
@@ -510,6 +535,7 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
           placeholder="Type to search nodes…"
           className="input paletteInput"
           aria-label="Command palette search"
+          aria-describedby={inputDescribedBy}
         />
 
         {quickAddEligible && (
@@ -548,12 +574,13 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
               <TagChips tags={parsedQuickAdd.tags} compact />
             )}
 
-            <div className="paletteQuickAddHint">
+            <div className="paletteQuickAddHint" id={quickAddHintId}>
               Tokens: `#tag` `@context` `!status` `type:task` `due:YYYY-MM-DD` `title:...`
             </div>
 
             {quickAddValidation.errors.length > 0 && (
-              <div className="paletteQuickAddErrors">
+              <div className="paletteQuickAddErrors" id={quickAddErrorId} role="alert">
+                <strong>Errors</strong>
                 {quickAddValidation.errors.map(message => (
                   <div key={message}>{message}</div>
                 ))}
@@ -561,7 +588,8 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
             )}
 
             {quickAddValidation.warnings.length > 0 && (
-              <div className="paletteQuickAddWarnings">
+              <div className="paletteQuickAddWarnings" id={quickAddWarningId} role="status" aria-live="polite">
+                <strong>Warnings</strong>
                 {quickAddValidation.warnings.map(message => (
                   <div key={message}>{message}</div>
                 ))}
@@ -571,7 +599,12 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
         )}
 
         {quickAddMessage && (
-          <div className={`paletteNotice paletteNotice--${quickAddMessage.tone}`}>
+          <div
+            id={quickAddMessageId}
+            className={`paletteNotice paletteNotice--${quickAddMessage.tone}`}
+            role="status"
+            aria-live="polite"
+          >
             {quickAddMessage.text}
           </div>
         )}
