@@ -18,6 +18,10 @@ Run this after any change before deploy.
 - Open `/capture` and enter: `Buy batteries #errands !inbox`.
 - Press Enter to save; confirm “Saved ✅”.
 - Go offline and repeat; confirm “Queued offline; will sync.”
+- Tap a capture template (Task/Idea/Waiting) and verify tokens appear in the input.
+
+## iOS safe-area
+- In standalone mode, verify nav buttons and Capture header are fully visible and not under the notch.
 
 ## Capture + Tags
 - Create a node in `/capture` with tags.

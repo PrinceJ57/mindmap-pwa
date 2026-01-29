@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import TagChips from '../components/TagChips'
 import { supabase } from '../supabaseClient'
 import { enqueuePayload, errorToString, getQueueCount, onQueueUpdate, shouldQueueError, syncOfflineQueue, type SaveNodeError } from '../offlineQueue'
@@ -16,6 +17,7 @@ type RecentRow = {
   status: string
   created_at: string
   updated_at?: string | null
+  pinned?: boolean | null
   tags?: string[] | null
 }
 
@@ -25,6 +27,15 @@ type BeforeInstallPromptEvent = Event & {
 }
 
 const INSTALL_DISMISS_KEY = 'mm_install_hint_dismissed'
+const CAPTURE_LINK_COPIED_KEY = 'mm_capture_link_copied'
+
+const CAPTURE_TEMPLATES = [
+  { label: 'Task', token: 'type:task !active ' },
+  { label: 'Idea', token: 'type:idea ' },
+  { label: 'Note', token: 'type:idea ' },
+  { label: 'Waiting', token: '!waiting ' },
+  { label: 'Someday', token: '!someday ' },
+] as const
 
 function tokenize(input: string) {
   return input.trim().split(/\s+/).filter(Boolean)
@@ -83,6 +94,24 @@ function buildPrefillInput() {
   return { text, prefilled: true }
 }
 
+function buildCaptureUrl(options: {
+  title: string
+  body: string
+  tags: string[]
+  context?: string
+  status?: string
+  type?: string
+}) {
+  const url = new URL('/capture', window.location.origin)
+  if (options.title) url.searchParams.set('title', options.title)
+  if (options.body) url.searchParams.set('body', options.body)
+  if (options.tags.length > 0) url.searchParams.set('tags', options.tags.join(','))
+  if (options.context) url.searchParams.set('context', options.context)
+  if (options.status) url.searchParams.set('status', options.status)
+  if (options.type) url.searchParams.set('type', options.type)
+  return url.toString()
+}
+
 export default function Capture() {
   const [rawInput, setRawInput] = useState('')
   const [saveMessage, setSaveMessage] = useState<SaveMessage | null>(null)
@@ -96,6 +125,7 @@ export default function Capture() {
   const [installDismissed, setInstallDismissed] = useState(false)
   const [online, setOnline] = useState(true)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const navigate = useNavigate()
 
   const { headline, body } = useMemo(() => splitInput(rawInput), [rawInput])
   const parsed = useMemo(() => parseQuickAdd(headline), [headline])
@@ -300,6 +330,53 @@ export default function Capture() {
     }
   }
 
+  async function handleTogglePinned(row: RecentRow) {
+    const nextPinned = !row.pinned
+    setRecent(prev => prev.map(item => (item.id === row.id ? { ...item, pinned: nextPinned } : item)))
+    const { error } = await supabase.rpc('set_node_pinned', { node_id: row.id, pinned: nextPinned })
+    if (error) {
+      setRecent(prev => prev.map(item => (item.id === row.id ? { ...item, pinned: row.pinned } : item)))
+      setSaveMessage({ tone: 'error', text: error.message })
+    }
+  }
+
+  async function handleMarkDone(row: RecentRow) {
+    const nextStatus = row.status === 'done' ? 'active' : 'done'
+    setRecent(prev => prev.map(item => (item.id === row.id ? { ...item, status: nextStatus } : item)))
+    const { error } = await supabase.rpc('set_node_status', { node_id: row.id, new_status: nextStatus })
+    if (error) {
+      setRecent(prev => prev.map(item => (item.id === row.id ? { ...item, status: row.status } : item)))
+      setSaveMessage({ tone: 'error', text: error.message })
+    }
+  }
+
+  async function handleArchive(row: RecentRow) {
+    setRecent(prev => prev.map(item => (item.id === row.id ? { ...item, status: 'archived' } : item)))
+    const { error } = await supabase.rpc('set_node_status', { node_id: row.id, new_status: 'archived' })
+    if (error) {
+      setRecent(prev => prev.map(item => (item.id === row.id ? { ...item, status: row.status } : item)))
+      setSaveMessage({ tone: 'error', text: error.message })
+    }
+  }
+
+  async function handleCopyLink() {
+    const url = buildCaptureUrl({
+      title: parsed.title.trim(),
+      body,
+      tags: parsed.tags,
+      context: parsed.context,
+      status: parsed.status,
+      type: parsed.type,
+    })
+    try {
+      await navigator.clipboard.writeText(url)
+      localStorage.setItem(CAPTURE_LINK_COPIED_KEY, String(Date.now()))
+      setSaveMessage({ tone: 'success', text: 'Capture link copied.' })
+    } catch {
+      setSaveMessage({ tone: 'error', text: 'Unable to copy capture link.' })
+    }
+  }
+
   return (
     <div className="stack capturePage">
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
@@ -388,6 +465,27 @@ export default function Capture() {
       )}
 
       <div className="card captureComposer">
+        <div className="captureTemplates">
+          {CAPTURE_TEMPLATES.map(template => (
+            <button
+              key={template.label}
+              type="button"
+              className="button button--ghost"
+              onClick={() => {
+                setRawInput(prev => {
+                  const next = prev.trim().length > 0
+                    ? `${template.token}${prev}`.trimStart()
+                    : template.token
+                  return next
+                })
+                inputRef.current?.focus()
+              }}
+            >
+              {template.label}
+            </button>
+          ))}
+        </div>
+
         <textarea
           ref={inputRef}
           value={rawInput}
@@ -459,12 +557,19 @@ export default function Capture() {
           >
             Clear
           </button>
+          <button
+            type="button"
+            onClick={() => void handleCopyLink()}
+            className="button button--ghost"
+          >
+            Copy capture link
+          </button>
         </div>
 
         {saveMessage && (
           <div
             role="status"
-            className="card"
+            className="card captureToast"
             style={{
               background: saveMessage.tone === 'offline'
                 ? 'rgba(245, 158, 11, 0.16)'
@@ -499,13 +604,47 @@ export default function Capture() {
             {recent.map(row => (
               <div key={row.id} className="captureRecentItem">
                 <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <span style={{ fontWeight: 600 }}>{row.title}</span>
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/node/${row.id}`)}
+                    className="button button--ghost"
+                    style={{ padding: 0, fontWeight: 600 }}
+                  >
+                    {row.title}
+                  </button>
                   <span className="muted" style={{ fontSize: 12 }}>{row.type}</span>
                 </div>
                 <div className="row row--wrap">
                   <span className="chip chip--compact">{row.status}</span>
+                  {row.pinned && <span className="chip chip--compact">pinned</span>}
                   {Array.isArray(row.tags) && row.tags.length > 0 && (
                     <TagChips tags={row.tags} compact />
+                  )}
+                </div>
+                <div className="captureRecentActions">
+                  <button
+                    type="button"
+                    className="chip chip--compact chip--clickable"
+                    onClick={() => void handleTogglePinned(row)}
+                  >
+                    {row.pinned ? 'Unpin' : 'Pin'}
+                  </button>
+                  {row.type === 'task' ? (
+                    <button
+                      type="button"
+                      className="chip chip--compact chip--clickable"
+                      onClick={() => void handleMarkDone(row)}
+                    >
+                      {row.status === 'done' ? 'Undone' : 'Done'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="chip chip--compact chip--clickable"
+                      onClick={() => void handleArchive(row)}
+                    >
+                      Archive
+                    </button>
                   )}
                 </div>
               </div>

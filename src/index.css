@@ -8,6 +8,8 @@
   --border: #1f2937;
   --radius: 12px;
   --shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
 
   font-family: "Space Grotesk", "Plus Jakarta Sans", "Segoe UI", sans-serif;
   line-height: 1.5;
@@ -99,7 +101,7 @@ textarea::placeholder {
 .container {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 24px 16px 72px;
+  padding: calc(24px + var(--safe-top)) 16px calc(72px + var(--safe-bottom));
 }
 
 .stack {
@@ -578,6 +580,37 @@ textarea::placeholder {
 .captureWarnings {
   border-color: rgba(245, 158, 11, 0.4);
   background: rgba(245, 158, 11, 0.16);
+}
+
+.captureTemplates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.captureTemplates .button {
+  padding: 8px 12px;
+}
+
+.captureToast {
+  animation: capture-pop 220ms ease-out;
+}
+
+.captureRecentActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@keyframes capture-pop {
+  from {
+    transform: scale(0.96);
+    opacity: 0.6;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .captureRecentItem {

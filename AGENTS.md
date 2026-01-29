@@ -284,3 +284,8 @@ Acceptance criteria:
 - Added offline/queue indicators and manual sync affordance on `/capture`.
 - Added install hint UX and iOS-friendly meta tags; manifest now opens at `/capture`.
 - Documented “Install as an app” steps in `DEPLOYMENT.md`.
+
+### Phase 6 part 1 changes (2026-01-29)
+- Added safe-area padding via CSS variables for notch/home-indicator devices.
+- Added capture templates, copy capture link, and recent item actions (pin/done/archive) on `/capture`.
+- Expanded `SMOKE_TEST.md` with safe-area and template checks.
