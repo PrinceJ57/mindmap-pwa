@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import TagInput from '../components/TagInput'
 import TagChips from '../components/TagChips'
+import { useToast } from '../components/Toast'
 import { supabase } from '../supabaseClient'
 import { createNodeWithTags, type NodeWritePayload } from '../lib/nodeWrites'
 import { extractInlineTags, mergeTags, normalizeTag } from '../lib/tagParse'
@@ -206,6 +207,7 @@ function parseCsvRows(text: string, sourceLabel: string): { items: ImportItem[];
 }
 
 export default function Import() {
+  const { showToast } = useToast()
   const [sourceChoice, setSourceChoice] = useState<SourceChoice>('bear')
   const [customSource, setCustomSource] = useState('')
   const [tags, setTags] = useState<string[]>(['imported', 'bear'])
@@ -314,11 +316,20 @@ export default function Import() {
 
   async function runImport() {
     if (importing) return
-    if (!sourceTag) return alert('Pick a source tag before importing.')
-    if (items.length === 0) return alert('Add files to import.')
+    if (!sourceTag) {
+      showToast('warning', 'Pick a source tag before importing.')
+      return
+    }
+    if (items.length === 0) {
+      showToast('warning', 'Add files to import.')
+      return
+    }
 
     const session = (await supabase.auth.getSession()).data.session
-    if (!session) return alert('Not signed in.')
+    if (!session) {
+      showToast('error', 'Not signed in.')
+      return
+    }
 
     setImporting(true)
     setCompleted(0)

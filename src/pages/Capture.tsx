@@ -1,52 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import TagChips from '../components/TagChips'
 import { supabase } from '../supabaseClient'
 import { enqueuePayload, errorToString, getQueueCount, onQueueUpdate, shouldQueueError, syncOfflineQueue, type SaveNodeError } from '../offlineQueue'
 import { createNodeWithTags, type NodeWritePayload } from '../lib/nodeWrites'
-import { parseQuickAdd } from '../lib/quickAddParse'
+import { parseQuickAdd, normalizeTokenValue, isValidDueDate } from '../lib/quickAddParse'
 import { CAPTURE_PREFILL_STORAGE_KEY, parsePrefillParams } from '../lib/queryPrefill'
 import { STATUSES } from '../utils/status'
+import CaptureTemplates from '../components/CaptureTemplates'
+import CapturePreview from '../components/CapturePreview'
+import RecentCaptures, { type RecentRow } from '../components/RecentCaptures'
+import InstallPrompt, { type BeforeInstallPromptEvent } from '../components/InstallPrompt'
 
 type SaveMessage = { tone: 'success' | 'offline' | 'error'; text: string }
-
-type RecentRow = {
-  id: number
-  title: string
-  type: string
-  status: string
-  created_at: string
-  updated_at?: string | null
-  pinned?: boolean | null
-  tags?: string[] | null
-}
-
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
-}
 
 const INSTALL_DISMISS_KEY = 'mm_install_hint_dismissed'
 const CAPTURE_LINK_COPIED_KEY = 'mm_capture_link_copied'
 
-const CAPTURE_TEMPLATES = [
-  { label: 'Task', token: 'type:task !active ' },
-  { label: 'Idea', token: 'type:idea ' },
-  { label: 'Note', token: 'type:idea ' },
-  { label: 'Waiting', token: '!waiting ' },
-  { label: 'Someday', token: '!someday ' },
-] as const
-
 function tokenize(input: string) {
   return input.trim().split(/\s+/).filter(Boolean)
-}
-
-function normalizeTokenValue(raw: string) {
-  return raw.trim().replace(/[.,;:!?]+$/g, '')
-}
-
-function isValidDueDate(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
 function splitInput(raw: string) {
@@ -200,7 +170,6 @@ export default function Capture() {
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const autosaveOnceRef = useRef(false)
   const autoTitleRef = useRef(false)
-  const navigate = useNavigate()
 
   const { headline, body } = useMemo(() => splitInput(rawInput), [rawInput])
   const parsed = useMemo(() => parseQuickAdd(headline), [headline])
@@ -577,70 +546,29 @@ export default function Capture() {
       )}
 
       {showInstallHint && (
-        <div className="card installHint">
-          <div className="stack-sm">
-            <strong>Install Mindmap</strong>
-            {installPrompt && (
-              <span className="muted" style={{ fontSize: 12 }}>
-                Install this app for a fast, standalone experience.
-              </span>
-            )}
-            {installPrompt && (
-              <div className="row row--wrap">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await installPrompt.prompt()
-                    const choice = await installPrompt.userChoice
-                    if (choice.outcome === 'accepted') {
-                      setInstallPrompt(null)
-                      setInstallDismissed(true)
-                    }
-                  }}
-                  className="button button--primary"
-                >
-                  Install
-                </button>
-                <button type="button" onClick={dismissInstallHint} className="button button--ghost">
-                  Not now
-                </button>
-              </div>
-            )}
-            {!installPrompt && isIos && (
-              <div className="stack-sm">
-                <span className="muted" style={{ fontSize: 12 }}>
-                  On iOS: tap Share, then “Add to Home Screen”.
-                </span>
-                <button type="button" onClick={dismissInstallHint} className="button button--ghost">
-                  Got it
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        <InstallPrompt
+          installPrompt={installPrompt}
+          isIos={isIos}
+          onInstalled={() => {
+            setInstallPrompt(null)
+            setInstallDismissed(true)
+          }}
+          onDismiss={dismissInstallHint}
+        />
       )}
 
       <div className="card captureComposer">
-        <div className="captureTemplates">
-          {CAPTURE_TEMPLATES.map(template => (
-            <button
-              key={template.label}
-              type="button"
-              className="button button--ghost"
-              onClick={() => {
-                setRawInput(prev => {
-                  const next = prev.trim().length > 0
-                    ? `${template.token}${prev}`.trimStart()
-                    : template.token
-                  return next
-                })
-                inputRef.current?.focus()
-              }}
-            >
-              {template.label}
-            </button>
-          ))}
-        </div>
+        <CaptureTemplates
+          onApply={(token) => {
+            setRawInput(prev => {
+              const next = prev.trim().length > 0
+                ? `${token}${prev}`.trimStart()
+                : token
+              return next
+            })
+          }}
+          inputRef={inputRef}
+        />
 
         <textarea
           ref={inputRef}
@@ -663,55 +591,15 @@ export default function Capture() {
           aria-label="Quick capture input"
         />
 
-        <div className="capturePreview">
-          <div className="row row--wrap">
-            <span className="chip chip--compact">{parsed.type ?? 'idea'}</span>
-            <span className="chip chip--compact">{parsed.status ?? 'inbox'}</span>
-            {parsed.context && <span className="chip chip--compact">@{parsed.context}</span>}
-            {parsed.due_at && <span className="chip chip--compact">due {parsed.due_at}</span>}
-            {linkInfo && <span className="chip chip--compact">link detected</span>}
-          </div>
-          <div style={{ fontWeight: 600 }}>
-            {parsed.title.trim() ? parsed.title.trim() : <span className="muted">Title required…</span>}
-          </div>
-          {parsed.tags.length > 0 && <TagChips tags={parsed.tags} compact />}
-          {linkInfo && (
-            <div className="row row--wrap" style={{ fontSize: 12 }}>
-              <span className="muted">{linkInfo.hostname}</span>
-              {suggestedTags.length > 0 && (
-                <button type="button" onClick={applySuggestedTags} className="chip chip--compact chip--clickable">
-                  Add #{suggestedTags.join(' #')}
-                </button>
-              )}
-              {!parsed.title.trim() && (
-                <button type="button" onClick={applySuggestedTitle} className="chip chip--compact chip--clickable">
-                  Use suggested title
-                </button>
-              )}
-            </div>
-          )}
-          {body && (
-            <div className="muted" style={{ fontSize: 12 }}>
-              Notes: {body.slice(0, 120)}{body.length > 120 ? '…' : ''}
-            </div>
-          )}
-          {validation.errors.length > 0 && (
-            <div className="captureErrors" role="alert">
-              <strong>Errors</strong>
-              {validation.errors.map(message => (
-                <div key={message}>{message}</div>
-              ))}
-            </div>
-          )}
-          {validation.warnings.length > 0 && (
-            <div className="captureWarnings" role="status" aria-live="polite">
-              <strong>Warnings</strong>
-              {validation.warnings.map(message => (
-                <div key={message}>{message}</div>
-              ))}
-            </div>
-          )}
-        </div>
+        <CapturePreview
+          parsed={parsed}
+          body={body}
+          linkInfo={linkInfo}
+          suggestedTags={suggestedTags}
+          validation={validation}
+          onApplySuggestedTags={applySuggestedTags}
+          onApplySuggestedTitle={applySuggestedTitle}
+        />
 
         <div className="row row--wrap">
           <button
@@ -767,70 +655,14 @@ export default function Capture() {
         )}
       </div>
 
-      <section className="card captureRecent">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <strong>Recent captures</strong>
-          <button type="button" className="button button--ghost" onClick={() => void loadRecent()}>
-            Refresh
-          </button>
-        </div>
-        {recentLoading && <span className="muted" style={{ fontSize: 12 }}>Loading…</span>}
-        {!recentLoading && recent.length === 0 && (
-          <span className="muted" style={{ fontSize: 12 }}>No recent captures yet.</span>
-        )}
-        {recent.length > 0 && (
-          <div className="stack-sm">
-            {recent.map(row => (
-              <div key={row.id} className="captureRecentItem">
-                <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/node/${row.id}`)}
-                    className="button button--ghost"
-                    style={{ padding: 0, fontWeight: 600 }}
-                  >
-                    {row.title}
-                  </button>
-                  <span className="muted" style={{ fontSize: 12 }}>{row.type}</span>
-                </div>
-                <div className="row row--wrap">
-                  <span className="chip chip--compact">{row.status}</span>
-                  {row.pinned && <span className="chip chip--compact">pinned</span>}
-                  {Array.isArray(row.tags) && row.tags.length > 0 && (
-                    <TagChips tags={row.tags} compact />
-                  )}
-                </div>
-                <div className="captureRecentActions">
-                  <button
-                    type="button"
-                    className="chip chip--compact chip--clickable"
-                    onClick={() => void handleTogglePinned(row)}
-                  >
-                    {row.pinned ? 'Unpin' : 'Pin'}
-                  </button>
-                  {row.type === 'task' ? (
-                    <button
-                      type="button"
-                      className="chip chip--compact chip--clickable"
-                      onClick={() => void handleMarkDone(row)}
-                    >
-                      {row.status === 'done' ? 'Undone' : 'Done'}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="chip chip--compact chip--clickable"
-                      onClick={() => void handleArchive(row)}
-                    >
-                      Archive
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <RecentCaptures
+        items={recent}
+        loading={recentLoading}
+        onRefresh={() => void loadRecent()}
+        onTogglePinned={(row) => void handleTogglePinned(row)}
+        onMarkDone={(row) => void handleMarkDone(row)}
+        onArchive={(row) => void handleArchive(row)}
+      />
     </div>
   )
 }

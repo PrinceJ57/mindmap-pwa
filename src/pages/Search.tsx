@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
+import { useToast } from '../components/Toast'
+import { normalizeTag } from '../utils/tagUtils'
 
 type NodeRow = {
   id: number
@@ -15,11 +17,8 @@ type NodeRow = {
 type TypeFilter = 'all' | 'idea' | 'task'
 type StatusFilter = 'all' | 'inbox' | 'active' | 'waiting' | 'someday' | 'done' | 'archived'
 
-function normalizeTag(raw: string) {
-  return raw.trim().toLowerCase()
-}
-
 export default function Search() {
+  const { showToast } = useToast()
   const [q, setQ] = useState('')
   const [rows, setRows] = useState<NodeRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -37,7 +36,7 @@ export default function Search() {
       .in('node_id', nodeIds)
 
     if (error) {
-      alert(error.message)
+      showToast('error', error.message)
       return baseRows.map(row => ({ ...row, tags: [] }))
     }
 
@@ -87,7 +86,7 @@ export default function Search() {
       if (!active) return
       if (error) {
         setLoading(false)
-        alert(error.message)
+        showToast('error', error.message)
         return
       }
 

@@ -4,7 +4,9 @@ import { supabase } from '../supabaseClient'
 import { addRecentNode } from '../lib/recentNodes'
 import TagInput from '../components/TagInput'
 import TagChips from '../components/TagChips'
+import { useToast } from '../components/Toast'
 import { STATUSES, type Status } from '../utils/status'
+import { normalizeTag } from '../utils/tagUtils'
 
 type NodeType = 'idea' | 'task'
 
@@ -47,10 +49,6 @@ type NodeListRow = {
   tags?: string[] | null
 }
 
-function normalizeTag(raw: string) {
-  return raw.trim().toLowerCase()
-}
-
 function formatTimestamp(value?: string | null) {
   if (!value) return null
   const date = new Date(value)
@@ -59,6 +57,7 @@ function formatTimestamp(value?: string | null) {
 }
 
 export default function NodeDetail() {
+  const { showToast } = useToast()
   const params = useParams()
   const nodeId = Number(params.id)
   const [node, setNode] = useState<NodeRecord | null>(null)
@@ -379,7 +378,7 @@ export default function NodeDetail() {
     const { error } = await supabase.rpc('delete_edge', { edge_id: edgeId })
     if (error) {
       setLinks(previous)
-      alert(error.message)
+      showToast('error', error.message)
     }
   }
 
@@ -396,7 +395,7 @@ export default function NodeDetail() {
 
     if (error) {
       setLinkWorking(false)
-      alert(error.message)
+      showToast('error', error.message)
       return
     }
 
@@ -406,7 +405,7 @@ export default function NodeDetail() {
 
     const { data, error: linksError } = await supabase.rpc('get_node_links', { node_id: node.id })
     if (linksError) {
-      alert(linksError.message)
+      showToast('error', linksError.message)
       return
     }
     setLinks((data ?? []) as LinkRow[])

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import TagInput from '../components/TagInput'
+import { useToast } from '../components/Toast'
 import { STATUSES, type Status } from '../utils/status'
+import { normalizeTag } from '../utils/tagUtils'
 
 type NodeRow = {
   id: number
@@ -25,10 +27,6 @@ const BUCKETS: { key: BucketKey; label: string; threshold: number }[] = [
   { key: '90', label: '90+ days', threshold: 90 },
 ]
 
-function normalizeTag(raw: string) {
-  return raw.trim().toLowerCase()
-}
-
 function daysSince(value?: string | null) {
   const fallback = value ? new Date(value).getTime() : NaN
   if (Number.isNaN(fallback)) return 0
@@ -44,6 +42,7 @@ function formatDate(value?: string | null) {
 }
 
 export default function Review() {
+  const { showToast } = useToast()
   const [rows, setRows] = useState<NodeRow[]>([])
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -279,7 +278,7 @@ export default function Review() {
       await syncTags(nodeId, nextTags)
     } catch (error) {
       setRows(previous)
-      alert((error as Error).message)
+      showToast('error', (error as Error).message)
     }
   }
 
@@ -289,7 +288,7 @@ export default function Review() {
     try {
       await updateReviewAfter(nodeId, until)
     } catch (error) {
-      alert((error as Error).message)
+      showToast('error', (error as Error).message)
     } finally {
       withWorking(nodeId, false)
     }
@@ -300,7 +299,7 @@ export default function Review() {
     try {
       await updateStatus(nodeId, 'archived')
     } catch (error) {
-      alert((error as Error).message)
+      showToast('error', (error as Error).message)
     } finally {
       withWorking(nodeId, false)
     }
@@ -315,7 +314,7 @@ export default function Review() {
         await updatePinned(row.id, true)
       }
     } catch (error) {
-      alert((error as Error).message)
+      showToast('error', (error as Error).message)
     } finally {
       withWorking(row.id, false)
     }
@@ -326,7 +325,7 @@ export default function Review() {
     try {
       await updatePinned(row.id, !row.pinned)
     } catch (error) {
-      alert((error as Error).message)
+      showToast('error', (error as Error).message)
     } finally {
       withWorking(row.id, false)
     }
@@ -426,7 +425,7 @@ export default function Review() {
                     const next = event.target.value as Status
                     withWorking(selectedRow.id, true)
                     updateStatus(selectedRow.id, next)
-                      .catch(error => alert((error as Error).message))
+                      .catch(error => showToast('error', (error as Error).message))
                       .finally(() => withWorking(selectedRow.id, false))
                   }}
                   disabled={workingIds.has(selectedRow.id)}

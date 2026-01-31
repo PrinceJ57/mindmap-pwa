@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react'
 import { supabase } from '../supabaseClient'
+import { normalizeTag } from '../utils/tagUtils'
 
 type TagInputProps = {
   value: string[]
   onChange: (next: string[]) => void
   placeholder?: string
-}
-
-function normalizeTag(raw: string) {
-  return raw.trim().toLowerCase()
 }
 
 export default function TagInput({ value, onChange, placeholder }: TagInputProps) {

@@ -14,7 +14,7 @@ import { supabase } from '../supabaseClient'
 import TagChips from './TagChips'
 import { enqueuePayload, errorToString, shouldQueueError, type SaveNodeError } from '../offlineQueue'
 import { createNodeWithTags, type NodeWritePayload } from '../lib/nodeWrites'
-import { parseQuickAdd } from '../lib/quickAddParse'
+import { parseQuickAdd, normalizeTag, normalizeTokenValue, isValidDueDate } from '../lib/quickAddParse'
 import { addRecentNode, getRecentNodes, type RecentNode } from '../lib/recentNodes'
 import { STATUSES } from '../utils/status'
 
@@ -53,18 +53,6 @@ type CommandPaletteProps = {
 type QuickAddMessage = {
   tone: 'success' | 'offline' | 'error'
   text: string
-}
-
-function normalizeTag(raw: string) {
-  return raw.trim().toLowerCase()
-}
-
-function normalizeTokenValue(raw: string) {
-  return raw.trim().replace(/[.,;:!?]+$/g, '')
-}
-
-function isValidDueDate(value: string) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
 function tokenizeQuickAdd(input: string) {

@@ -1,29 +1,23 @@
 import { STATUSES, type Status } from '../utils/status'
-import type { NodeType } from './nodeWrites'
+import {
+  normalizeTag,
+  normalizeTokenValue,
+  isValidDueDate,
+  isValidType,
+  type NodeType,
+} from '../utils/tagUtils'
+import type { NodeType as NodeWriteType } from './nodeWrites'
+
+// Re-export validation utilities for use in other files
+export { normalizeTag, normalizeTokenValue, isValidDueDate, isValidType }
 
 export type QuickAddParseResult = {
   title: string
   tags: string[]
   context?: string
   status?: Status
-  type?: NodeType
+  type?: NodeWriteType
   due_at?: string
-}
-
-function stripTrailingPunctuation(value: string): string {
-  return value.replace(/[.,;:!?]+$/g, '')
-}
-
-function normalizeTag(raw: string): string {
-  return stripTrailingPunctuation(raw.trim().toLowerCase())
-}
-
-function normalizeTokenValue(raw: string): string {
-  return stripTrailingPunctuation(raw.trim())
-}
-
-function isValidDueDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value)
 }
 
 function isStatusToken(token: string): boolean {
