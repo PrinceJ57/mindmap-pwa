@@ -1,19 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Routes, Route, Navigate, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import type { Session } from '@supabase/supabase-js'
-import Login from './pages/Login'
-import Capture from './pages/Capture'
-import Search from './pages/Search'
-import Board from './pages/Board'
-import Outline from './pages/Outline'
-import NodeDetail from './pages/NodeDetail'
-import Home from './pages/Home'
-import Review from './pages/Review'
-import Import from './pages/Import'
 import { getQueueCount, onQueueUpdate, syncOfflineQueue } from './offlineQueue'
 import { CAPTURE_PREFILL_STORAGE_KEY, parsePrefillParams } from './lib/queryPrefill'
 import CommandPalette, { type CommandPaletteHandle } from './components/CommandPalette'
+import LoadingSpinner from './components/LoadingSpinner'
+import { ToastProvider } from './components/Toast'
+
+// Lazy-loaded page components for code splitting
+const Login = lazy(() => import('./pages/Login'))
+const Capture = lazy(() => import('./pages/Capture'))
+const Search = lazy(() => import('./pages/Search'))
+const Board = lazy(() => import('./pages/Board'))
+const Outline = lazy(() => import('./pages/Outline'))
+const NodeDetail = lazy(() => import('./pages/NodeDetail'))
+const Home = lazy(() => import('./pages/Home'))
+const Review = lazy(() => import('./pages/Review'))
+const Import = lazy(() => import('./pages/Import'))
 
 export default function App() {
   const [loading, setLoading] = useState(true)
@@ -82,13 +86,14 @@ export default function App() {
     navigate('/login')
   }
 
-  if (loading) return <div style={{ padding: 16 }}>Loading…</div>
+  if (loading) return <LoadingSpinner />
 
   return (
-    <div className="container">
-      {signedIn && (
-        <header className="nav">
-          <div className="nav__inner">
+    <ToastProvider>
+      <div className="container">
+        {signedIn && (
+          <header className="nav">
+            <div className="nav__inner">
             <NavLink to="/home" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
               Home
             </NavLink>
@@ -135,27 +140,30 @@ export default function App() {
             >
               {syncing ? 'Syncing…' : 'Sync now'}
             </button>
-            <button onClick={signOut} className="button button--ghost">
-              Sign out
-            </button>
-          </div>
-        </header>
-      )}
+              <button onClick={signOut} className="button button--ghost">
+                Sign out
+              </button>
+            </div>
+          </header>
+        )}
 
-      <Routes>
-        <Route path="/login" element={signedIn ? <Navigate to="/home" /> : <Login />} />
-        <Route path="/home" element={signedIn ? <Home /> : <Navigate to="/login" />} />
-        <Route path="/capture" element={signedIn ? <Capture /> : <Navigate to="/login" />} />
-        <Route path="/search" element={signedIn ? <Search /> : <Navigate to="/login" />} />
-        <Route path="/board" element={signedIn ? <Board /> : <Navigate to="/login" />} />
-        <Route path="/outline" element={signedIn ? <Outline /> : <Navigate to="/login" />} />
-        <Route path="/review" element={signedIn ? <Review /> : <Navigate to="/login" />} />
-        <Route path="/import" element={signedIn ? <Import /> : <Navigate to="/login" />} />
-        <Route path="/node/:id" element={signedIn ? <NodeDetail /> : <Navigate to="/login" />} />
-        <Route path="*" element={<Navigate to={signedIn ? "/home" : "/login"} />} />
-      </Routes>
+        <Suspense fallback={<LoadingSpinner />}>
+          <Routes>
+            <Route path="/login" element={signedIn ? <Navigate to="/home" /> : <Login />} />
+            <Route path="/home" element={signedIn ? <Home /> : <Navigate to="/login" />} />
+            <Route path="/capture" element={signedIn ? <Capture /> : <Navigate to="/login" />} />
+            <Route path="/search" element={signedIn ? <Search /> : <Navigate to="/login" />} />
+            <Route path="/board" element={signedIn ? <Board /> : <Navigate to="/login" />} />
+            <Route path="/outline" element={signedIn ? <Outline /> : <Navigate to="/login" />} />
+            <Route path="/review" element={signedIn ? <Review /> : <Navigate to="/login" />} />
+            <Route path="/import" element={signedIn ? <Import /> : <Navigate to="/login" />} />
+            <Route path="/node/:id" element={signedIn ? <NodeDetail /> : <Navigate to="/login" />} />
+            <Route path="*" element={<Navigate to={signedIn ? "/home" : "/login"} />} />
+          </Routes>
+        </Suspense>
 
-      <CommandPalette ref={paletteRef} enabled={signedIn} />
-    </div>
+        <CommandPalette ref={paletteRef} enabled={signedIn} />
+      </div>
+    </ToastProvider>
   )
 }

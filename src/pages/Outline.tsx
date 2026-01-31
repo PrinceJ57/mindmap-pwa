@@ -3,7 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import TagInput from '../components/TagInput'
 import TagChips from '../components/TagChips'
+import { useToast } from '../components/Toast'
 import { STATUSES, type Status } from '../utils/status'
+import { normalizeTag } from '../utils/tagUtils'
 import {
   areFiltersEqual,
   filtersToSearchParams,
@@ -36,10 +38,6 @@ type SavedViewRow = {
   updated_at: string
 }
 
-function normalizeTag(raw: string) {
-  return raw.trim().toLowerCase()
-}
-
 function mergeTags(existing: string[] = [], incoming: string[]) {
   const set = new Set(existing.map(normalizeTag))
   for (const tag of incoming) set.add(normalizeTag(tag))
@@ -69,6 +67,7 @@ function sortRows(rows: NodeRow[], sort: ViewSort) {
 }
 
 export default function Outline() {
+  const { showToast } = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const [filtersReady, setFiltersReady] = useState(false)
 
@@ -329,7 +328,7 @@ export default function Outline() {
       await updateStatuses(ids, bulkStatus)
     } catch (error) {
       setRows(previous)
-      alert((error as Error).message)
+      showToast('error', (error as Error).message)
     } finally {
       setWorking(false)
       setBulkStatus('')
@@ -352,7 +351,7 @@ export default function Outline() {
       )))
       setBulkTags([])
     } catch (error) {
-      alert((error as Error).message)
+      showToast('error', (error as Error).message)
     } finally {
       setWorking(false)
     }
@@ -364,7 +363,7 @@ export default function Outline() {
 
     const session = (await supabase.auth.getSession()).data.session
     if (!session) {
-      alert('Not signed in.')
+      showToast('error', 'Not signed in.')
       return
     }
 
@@ -379,7 +378,7 @@ export default function Outline() {
       .single()
 
     if (error) {
-      alert(error.message)
+      showToast('error', error.message)
       return
     }
 
@@ -417,7 +416,7 @@ export default function Outline() {
       .single()
 
     if (error) {
-      alert(error.message)
+      showToast('error', error.message)
       return
     }
 
@@ -443,7 +442,7 @@ export default function Outline() {
       .single()
 
     if (error) {
-      alert(error.message)
+      showToast('error', error.message)
       return
     }
 
@@ -469,7 +468,7 @@ export default function Outline() {
       .eq('id', view.id)
 
     if (error) {
-      alert(error.message)
+      showToast('error', error.message)
       return
     }
 

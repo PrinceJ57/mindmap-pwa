@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import TagChips from '../components/TagChips'
+import { normalizeTag } from '../utils/tagUtils'
 import { filtersToQueryString, normalizeViewFilters, type ViewFilters } from '../utils/viewFilters'
 
 const PANEL_LIMIT = 10
@@ -21,10 +22,6 @@ type SavedViewRow = {
   id: number
   name: string
   filters: ViewFilters
-}
-
-function normalizeTag(raw: string) {
-  return raw.trim().toLowerCase()
 }
 
 function parseSavedViewFilters(raw: unknown): ViewFilters {

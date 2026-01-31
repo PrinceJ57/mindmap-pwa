@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../supabaseClient'
 import TagInput from '../components/TagInput'
 import TagChips from '../components/TagChips'
+import { useToast } from '../components/Toast'
 import { STATUSES, type Status } from '../utils/status'
+import { normalizeTag } from '../utils/tagUtils'
 
 type NodeRow = {
   id: number
@@ -22,11 +24,8 @@ type DragPayload = {
   status: Status
 }
 
-function normalizeTag(raw: string) {
-  return raw.trim().toLowerCase()
-}
-
 export default function Board() {
+  const { showToast } = useToast()
   const [q, setQ] = useState('')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [tagFilter, setTagFilter] = useState<string[]>([])
@@ -149,7 +148,7 @@ export default function Board() {
     })
 
     if (error) {
-      alert(error.message)
+      showToast('error', error.message)
       setRows(prev => prev.map(row => (row.id === nodeId ? { ...row, status: currentStatus } : row)))
     }
   }
