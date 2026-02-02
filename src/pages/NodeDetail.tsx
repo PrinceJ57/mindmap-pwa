@@ -5,6 +5,7 @@ import { addRecentNode } from '../lib/recentNodes'
 import TagInput from '../components/TagInput'
 import TagChips from '../components/TagChips'
 import { useToast } from '../components/Toast'
+import { buildSuggestionQuery, suggestEdges, type EdgeSuggestion, type SuggestionNode } from '../lib/edgeSuggestions'
 import { STATUSES, type Status } from '../utils/status'
 import { normalizeTag } from '../utils/tagUtils'
 
@@ -60,6 +61,7 @@ type NodeListRow = {
   title: string
   type: string
   status: string
+  body?: string | null
   tags?: string[] | null
 }
 
@@ -95,6 +97,12 @@ export default function NodeDetail() {
   const [linkLoading, setLinkLoading] = useState(false)
   const [linkRelation, setLinkRelation] = useState<Relation>('related')
   const [linkWorking, setLinkWorking] = useState(false)
+
+  const [suggestionPool, setSuggestionPool] = useState<NodeListRow[]>([])
+  const [suggestionLoading, setSuggestionLoading] = useState(false)
+  const [suggestionError, setSuggestionError] = useState<string | null>(null)
+  const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<Set<number>>(new Set())
+  const [suggestionRefreshKey, setSuggestionRefreshKey] = useState(0)
 
   const invalidId = Number.isNaN(nodeId) || nodeId <= 0
 
@@ -164,6 +172,11 @@ export default function NodeDetail() {
   }, [nodeId, invalidId])
 
   useEffect(() => {
+    setDismissedSuggestionIds(new Set())
+    setSuggestionPool([])
+  }, [nodeId])
+
+  useEffect(() => {
     if (!linkModalOpen) return
     let active = true
 
@@ -200,6 +213,48 @@ export default function NodeDetail() {
 
     return () => { active = false }
   }, [linkModalOpen, linkSearch])
+
+  useEffect(() => {
+    if (!node) return
+    let active = true
+
+    async function loadSuggestionPool() {
+      setSuggestionLoading(true)
+      setSuggestionError(null)
+
+      const query = buildSuggestionQuery({ title, tags })
+      const { data, error } = await supabase.rpc('list_nodes', {
+        lim: 250,
+        q: query,
+        type_filter: null,
+        status_filter: null,
+        tag_filter: null,
+        pinned_only: false,
+        review_due_only: false,
+      })
+
+      if (!active) return
+
+      if (error) {
+        setSuggestionError(error.message)
+        setSuggestionPool([])
+        setSuggestionLoading(false)
+        return
+      }
+
+      const normalized = ((data ?? []) as NodeListRow[]).map(row => ({
+        ...row,
+        tags: Array.isArray(row.tags) ? row.tags.map(normalizeTag) : [],
+      }))
+
+      setSuggestionPool(normalized)
+      setSuggestionLoading(false)
+    }
+
+    loadSuggestionPool()
+
+    return () => { active = false }
+  }, [node?.id, suggestionRefreshKey])
 
   const outgoingLinks = useMemo(
     () => links.filter(link => link.direction === 'outgoing'),
@@ -238,6 +293,35 @@ export default function NodeDetail() {
     }
     return set
   }, [outgoingLinks])
+
+  const existingLinkedIds = useMemo(() => {
+    const set = new Set<number>()
+    for (const link of links) {
+      set.add(link.other_node_id)
+    }
+    return set
+  }, [links])
+
+  const { dependencies: dependencySuggestions, related: relatedSuggestions } = useMemo(() => {
+    if (!node) return { dependencies: [], related: [] }
+    const current: SuggestionNode = {
+      id: node.id,
+      title,
+      body,
+      status,
+      type,
+      tags,
+    }
+    const suggestions = suggestEdges({
+      current,
+      candidates: suggestionPool,
+      existingIds: existingLinkedIds,
+    })
+    return {
+      dependencies: suggestions.dependencies.filter(item => !dismissedSuggestionIds.has(item.id)),
+      related: suggestions.related.filter(item => !dismissedSuggestionIds.has(item.id)),
+    }
+  }, [node, title, body, status, type, tags, suggestionPool, existingLinkedIds, dismissedSuggestionIds])
 
   async function upsertTags(names: string[]) {
     const session = (await supabase.auth.getSession()).data.session
@@ -412,6 +496,14 @@ export default function NodeDetail() {
     setLinkModalOpen(true)
   }
 
+  function dismissSuggestion(id: number) {
+    setDismissedSuggestionIds(prev => {
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+  }
+
   async function handleRemoveLink(edgeId: number) {
     const previous = links
     setLinks(prev => prev.filter(link => link.edge_id !== edgeId))
@@ -422,7 +514,7 @@ export default function NodeDetail() {
     }
   }
 
-  async function handleCreateLink(targetId: number) {
+  async function createEdge(targetId: number, relation: Relation) {
     if (!node) return
     if (targetId === node.id) return
     setLinkWorking(true)
@@ -430,25 +522,39 @@ export default function NodeDetail() {
     const { error } = await supabase.rpc('create_edge', {
       from_node_id: node.id,
       to_node_id: targetId,
-      relation: linkRelation,
+      relation,
     })
 
     if (error) {
       setLinkWorking(false)
       showToast('error', error.message)
-      return
+      return false
     }
-
-    setLinkWorking(false)
-    setLinkModalOpen(false)
-    setLinkSearch('')
 
     const { data, error: linksError } = await supabase.rpc('get_node_links', { node_id: node.id })
     if (linksError) {
       showToast('error', linksError.message)
-      return
+      setLinkWorking(false)
+      return false
     }
     setLinks((data ?? []) as LinkRow[])
+    setLinkWorking(false)
+    return true
+  }
+
+  async function handleCreateLink(targetId: number) {
+    const created = await createEdge(targetId, linkRelation)
+    if (!created) return
+    setLinkModalOpen(false)
+    setLinkSearch('')
+  }
+
+  async function handleCreateSuggestion(suggestion: EdgeSuggestion) {
+    const relation = suggestion.relation === 'depends_on' ? 'depends_on' : 'related'
+    const created = await createEdge(suggestion.id, relation)
+    if (created) {
+      dismissSuggestion(suggestion.id)
+    }
   }
 
   const createdAt = formatTimestamp(node?.created_at)
@@ -570,6 +676,108 @@ export default function NodeDetail() {
                   {link.other_node_title}
                 </Link>
                 <span className="muted" style={{ fontSize: 11 }}>depends on</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="stack-sm">
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h3>Suggestions</h3>
+          <button
+            type="button"
+            onClick={() => setSuggestionRefreshKey(prev => prev + 1)}
+            className="button button--ghost"
+          >
+            Refresh
+          </button>
+        </div>
+        {suggestionLoading && <span className="muted" style={{ fontSize: 12 }}>Loading suggestions…</span>}
+        {suggestionError && <span style={{ color: '#f87171' }}>{suggestionError}</span>}
+        {!suggestionLoading && !suggestionError && dependencySuggestions.length === 0 && relatedSuggestions.length === 0 && (
+          <span className="muted" style={{ fontSize: 12 }}>No suggestions yet.</span>
+        )}
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: 12,
+          }}
+        >
+          <div className="card" style={{ display: 'grid', gap: 10 }}>
+            <strong>Suggested dependencies</strong>
+            {dependencySuggestions.length === 0 && (
+              <span className="muted" style={{ fontSize: 12 }}>None right now.</span>
+            )}
+            {dependencySuggestions.map(item => (
+              <div key={`dep-suggest-${item.id}`} className="stack-sm">
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <Link to={`/node/${item.id}`} style={{ fontSize: 14 }}>
+                    {item.title}
+                  </Link>
+                  <div className="row">
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateSuggestion(item)}
+                      disabled={linkWorking}
+                      className="button button--primary"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => dismissSuggestion(item.id)}
+                      className="button button--ghost"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+                {item.reasons.length > 0 && (
+                  <div className="muted" style={{ fontSize: 11 }}>
+                    {item.reasons.join(' • ')}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="card" style={{ display: 'grid', gap: 10 }}>
+            <strong>Suggested related links</strong>
+            {relatedSuggestions.length === 0 && (
+              <span className="muted" style={{ fontSize: 12 }}>None right now.</span>
+            )}
+            {relatedSuggestions.map(item => (
+              <div key={`rel-suggest-${item.id}`} className="stack-sm">
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <Link to={`/node/${item.id}`} style={{ fontSize: 14 }}>
+                    {item.title}
+                  </Link>
+                  <div className="row">
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateSuggestion(item)}
+                      disabled={linkWorking}
+                      className="button button--primary"
+                    >
+                      Link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => dismissSuggestion(item.id)}
+                      className="button button--ghost"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+                {item.reasons.length > 0 && (
+                  <div className="muted" style={{ fontSize: 11 }}>
+                    {item.reasons.join(' • ')}
+                  </div>
+                )}
               </div>
             ))}
           </div>
