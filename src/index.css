@@ -693,6 +693,10 @@ textarea::placeholder {
   pointer-events: none;
 }
 
+.mindmapDepEdges {
+  pointer-events: none;
+}
+
 .mindmapEdge {
   fill: none;
   stroke-width: 1.2;
@@ -703,6 +707,20 @@ textarea::placeholder {
 .mindmapEdge--active {
   opacity: 0.72;
   stroke-width: 1.6;
+}
+
+.mindmapDepEdge {
+  fill: none;
+  stroke: rgba(148, 163, 184, 0.7);
+  stroke-width: 1.8;
+  opacity: 0.8;
+  transition: opacity 120ms ease, stroke 120ms ease;
+}
+
+.mindmapDepEdge--active {
+  stroke: var(--accent);
+  opacity: 1;
+  stroke-width: 2.2;
 }
 
 .mindmapNode {

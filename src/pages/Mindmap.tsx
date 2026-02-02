@@ -19,6 +19,14 @@ type NodeRow = {
   tags?: string[] | null
 }
 
+type DependencyEdgeRow = {
+  id: number
+  from_node_id: number
+  to_node_id: number
+  relation: string
+  created_at: string
+}
+
 type SimNode = {
   id: number
   type: string
@@ -33,16 +41,24 @@ type SimNode = {
   height: number
 }
 
-type Edge = {
+type TagEdge = {
   a: number
   b: number
   tag: string
   color: string
 }
 
+type DependencyEdge = {
+  id: number
+  a: number
+  b: number
+  relation: string
+}
+
 type SimState = {
   nodes: SimNode[]
-  edges: Edge[]
+  tagEdges: TagEdge[]
+  dependencyEdges: DependencyEdge[]
   indexById: Map<number, number>
   stableFrames: number
 }
@@ -112,7 +128,7 @@ function initialPosition(index: number, seed: number) {
   }
 }
 
-function buildEdges(nodes: NodeRow[]) {
+function buildTagEdges(nodes: NodeRow[]) {
   const tagMap = new Map<string, number[]>()
   for (let index = 0; index < nodes.length; index += 1) {
     const tags = nodes[index].tags ?? []
@@ -133,7 +149,7 @@ function buildEdges(nodes: NodeRow[]) {
     .filter(([, indices]) => indices.length > 1)
     .sort((a, b) => b[1].length - a[1].length)
 
-  const edges: Edge[] = []
+  const edges: TagEdge[] = []
   let truncated = false
 
   for (const [tag, indices] of tags) {
@@ -207,6 +223,25 @@ function edgePath(a: SimNode, b: SimNode) {
   return `M ${a.x.toFixed(2)} ${a.y.toFixed(2)} Q ${cx.toFixed(2)} ${cy.toFixed(2)} ${b.x.toFixed(2)} ${b.y.toFixed(2)}`
 }
 
+function dependencyPath(a: SimNode, b: SimNode) {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const distance = Math.hypot(dx, dy) || 1
+  const startOffset = Math.max(a.height / 2, 18)
+  const endOffset = Math.max(b.height / 2, 18)
+  const sx = a.x + (dx / distance) * startOffset
+  const sy = a.y + (dy / distance) * startOffset
+  const ex = b.x - (dx / distance) * endOffset
+  const ey = b.y - (dy / distance) * endOffset
+
+  const mx = (sx + ex) / 2
+  const my = (sy + ey) / 2
+  const curve = Math.min(64, distance / 4)
+  const cx = mx - (dy / distance) * curve
+  const cy = my + (dx / distance) * curve
+  return `M ${sx.toFixed(2)} ${sy.toFixed(2)} Q ${cx.toFixed(2)} ${cy.toFixed(2)} ${ex.toFixed(2)} ${ey.toFixed(2)}`
+}
+
 export default function Mindmap() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -223,8 +258,11 @@ export default function Mindmap() {
   const filterChips = useMemo(() => summarizeFilters(filters), [filters])
 
   const [nodes, setNodes] = useState<NodeRow[]>([])
+  const [dependencyRows, setDependencyRows] = useState<DependencyEdgeRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [dependencyLoading, setDependencyLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [dependencyError, setDependencyError] = useState<string | null>(null)
   const [layoutRunning, setLayoutRunning] = useState(true)
   const [layoutSeed, setLayoutSeed] = useState(0)
   const [renderTick, setRenderTick] = useState(0)
@@ -240,7 +278,21 @@ export default function Mindmap() {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const size = useElementSize(containerRef)
 
-  const { edges, tagCounts, truncated: edgesTruncated } = useMemo(() => buildEdges(nodes), [nodes])
+  const { edges: tagEdges, tagCounts, truncated: tagEdgesTruncated } = useMemo(() => buildTagEdges(nodes), [nodes])
+
+  const dependencyEdges = useMemo<DependencyEdge[]>(() => {
+    if (dependencyRows.length === 0 || nodes.length === 0) return []
+    const indexById = new Map<number, number>()
+    nodes.forEach((node, index) => indexById.set(node.id, index))
+    const mapped: DependencyEdge[] = []
+    for (const edge of dependencyRows) {
+      const fromIndex = indexById.get(edge.from_node_id)
+      const toIndex = indexById.get(edge.to_node_id)
+      if (fromIndex === undefined || toIndex === undefined) continue
+      mapped.push({ id: edge.id, a: fromIndex, b: toIndex, relation: edge.relation })
+    }
+    return mapped
+  }, [dependencyRows, nodes])
 
   const limitHit = nodes.length >= MAX_NODES
 
@@ -314,6 +366,48 @@ export default function Mindmap() {
   }, [filters])
 
   useEffect(() => {
+    if (nodes.length === 0) {
+      setDependencyRows([])
+      return
+    }
+    let active = true
+
+    async function loadDependencies() {
+      setDependencyLoading(true)
+      setDependencyError(null)
+
+      const nodeIds = nodes.map(node => node.id)
+      const { data, error } = await supabase.rpc('list_edges_for_nodes', {
+        node_ids: nodeIds,
+        relation_filter: 'depends_on',
+      })
+
+      if (!active) return
+
+      if (error) {
+        setDependencyRows([])
+        setDependencyError(error.message)
+        setDependencyLoading(false)
+        return
+      }
+
+      const idSet = new Set(nodeIds)
+      const filtered = ((data ?? []) as DependencyEdgeRow[]).filter(edge => (
+        idSet.has(edge.from_node_id) && idSet.has(edge.to_node_id)
+      ))
+
+      setDependencyRows(filtered)
+      setDependencyLoading(false)
+    }
+
+    loadDependencies()
+
+    return () => {
+      active = false
+    }
+  }, [nodes])
+
+  useEffect(() => {
     if (nodes.length === 0 || size.width === 0 || size.height === 0) return
 
     const simNodes = nodes.map((node, index) => {
@@ -339,7 +433,8 @@ export default function Mindmap() {
 
     simRef.current = {
       nodes: simNodes,
-      edges,
+      tagEdges,
+      dependencyEdges,
       indexById,
       stableFrames: 0,
     }
@@ -350,7 +445,7 @@ export default function Mindmap() {
     window.setTimeout(() => {
       fitToView()
     }, 0)
-  }, [nodes, edges, size.width, size.height, layoutSeed])
+  }, [nodes, tagEdges, dependencyEdges, size.width, size.height, layoutSeed])
 
   function ensureAnimation() {
     if (animationRef.current !== null) return
@@ -366,14 +461,15 @@ export default function Mindmap() {
     if (!shouldRun) return
     const dragging = dragRef.current
 
-    const { nodes: simNodes, edges: simEdges } = sim
+    const { nodes: simNodes, tagEdges: simTagEdges, dependencyEdges: simDependencyEdges } = sim
     const count = simNodes.length
 
     if (count === 0) return
 
     const repulsion = count > 900 ? 2500 : count > 500 ? 3800 : 6200
     const centerStrength = count > 900 ? 0.00035 : 0.0006
-    const edgeStrength = count > 900 ? 0.001 : 0.0018
+    const tagEdgeStrength = count > 900 ? 0.0009 : 0.0015
+    const dependencyStrength = count > 900 ? 0.0032 : 0.005
     const damping = 0.84
     const maxVelocity = 6
 
@@ -407,7 +503,7 @@ export default function Mindmap() {
       }
     }
 
-    for (const edge of simEdges) {
+    for (const edge of simTagEdges) {
       const a = simNodes[edge.a]
       const b = simNodes[edge.b]
       const dx = b.x - a.x
@@ -415,7 +511,24 @@ export default function Mindmap() {
       const distance = Math.hypot(dx, dy) || 1
       const target = (a.width + b.width) * 0.65 + 36
       const delta = distance - target
-      const force = delta * edgeStrength
+      const force = delta * tagEdgeStrength
+      const fx = (dx / distance) * force
+      const fy = (dy / distance) * force
+      a.vx += fx
+      a.vy += fy
+      b.vx -= fx
+      b.vy -= fy
+    }
+
+    for (const edge of simDependencyEdges) {
+      const a = simNodes[edge.a]
+      const b = simNodes[edge.b]
+      const dx = b.x - a.x
+      const dy = b.y - a.y
+      const distance = Math.hypot(dx, dy) || 1
+      const target = (a.width + b.width) * 0.5 + 24
+      const delta = distance - target
+      const force = delta * dependencyStrength
       const fx = (dx / distance) * force
       const fy = (dy / distance) * force
       a.vx += fx
@@ -680,9 +793,11 @@ export default function Mindmap() {
         <div className="stack-sm">
           <h2>Mindmap</h2>
           <span className="muted" style={{ fontSize: 12 }}>
-            {nodes.length} nodes · {tagCounts.size} tags · {edges.length} tag links
+            {nodes.length} nodes · {dependencyEdges.length} dependencies · {tagCounts.size} tags · {tagEdges.length} tag links
             {limitHit ? ` · showing first ${MAX_NODES}` : ''}
-            {edgesTruncated ? ' · lines capped' : ''}
+            {tagEdgesTruncated ? ' · lines capped' : ''}
+            {dependencyLoading ? ' · loading dependencies…' : ''}
+            {dependencyError ? ' · dependencies unavailable' : ''}
           </span>
         </div>
         <div className="row row--wrap">
@@ -754,11 +869,50 @@ export default function Mindmap() {
               <stop offset="0%" stopColor="rgba(255,255,255,0.08)" />
               <stop offset="100%" stopColor="rgba(255,255,255,0)" />
             </linearGradient>
+            <marker
+              id="arrowHead"
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(148, 163, 184, 0.7)" />
+            </marker>
+            <marker
+              id="arrowHeadActive"
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
+            </marker>
           </defs>
 
           <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
+            <g className="mindmapDepEdges" pointerEvents="none">
+              {dependencyEdges.map(edge => {
+                const a = simNodes[edge.a]
+                const b = simNodes[edge.b]
+                if (!a || !b) return null
+                const isActive = activeIndex !== undefined && (edge.a === activeIndex || edge.b === activeIndex)
+                return (
+                  <path
+                    key={`dep-${edge.id}`}
+                    d={dependencyPath(a, b)}
+                    className={`mindmapDepEdge${isActive ? ' mindmapDepEdge--active' : ''}`}
+                    markerEnd={`url(#${isActive ? 'arrowHeadActive' : 'arrowHead'})`}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                )
+              })}
+            </g>
             <g className="mindmapEdges" pointerEvents="none">
-              {edges.map((edge, index) => {
+              {tagEdges.map((edge, index) => {
                 const a = simNodes[edge.a]
                 const b = simNodes[edge.b]
                 if (!a || !b) return null
@@ -836,6 +990,8 @@ export default function Mindmap() {
 
         <div className="mindmapHud">
           <div className="mindmapHudTitle">Controls</div>
+          <div className="mindmapHudText">Arrows = dependencies</div>
+          <div className="mindmapHudText">Thin lines = tags</div>
           <div className="mindmapHudText">Drag canvas to pan</div>
           <div className="mindmapHudText">Scroll / pinch to zoom</div>
           <div className="mindmapHudText">Drag a node to reposition</div>

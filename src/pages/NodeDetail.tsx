@@ -10,9 +10,23 @@ import { normalizeTag } from '../utils/tagUtils'
 
 type NodeType = 'idea' | 'task'
 
-const RELATIONS = ['related', 'supports', 'blocks', 'depends_on'] as const
+const RELATIONS = ['depends_on', 'related', 'supports', 'blocks'] as const
 
 type Relation = typeof RELATIONS[number]
+
+const RELATION_LABELS: Record<Relation, string> = {
+  depends_on: 'Depends on',
+  related: 'Related',
+  supports: 'Supports',
+  blocks: 'Blocks',
+}
+
+const RELATION_HINTS: Record<Relation, string> = {
+  depends_on: 'This node depends on the selected node.',
+  related: 'A loose, bidirectional relationship.',
+  supports: 'This node supports the selected node.',
+  blocks: 'This node blocks the selected node.',
+}
 
 type NodeRecord = {
   id: number
@@ -197,6 +211,26 @@ export default function NodeDetail() {
     [links]
   )
 
+  const dependencyOutgoing = useMemo(
+    () => outgoingLinks.filter(link => link.relation === 'depends_on'),
+    [outgoingLinks]
+  )
+
+  const dependencyIncoming = useMemo(
+    () => incomingLinks.filter(link => link.relation === 'depends_on'),
+    [incomingLinks]
+  )
+
+  const otherOutgoing = useMemo(
+    () => outgoingLinks.filter(link => link.relation !== 'depends_on'),
+    [outgoingLinks]
+  )
+
+  const otherIncoming = useMemo(
+    () => incomingLinks.filter(link => link.relation !== 'depends_on'),
+    [incomingLinks]
+  )
+
   const outgoingKeySet = useMemo(() => {
     const set = new Set<string>()
     for (const link of outgoingLinks) {
@@ -372,6 +406,12 @@ export default function NodeDetail() {
     setSaveMessage('Archived.')
   }
 
+  function openLinkModal(relation: Relation) {
+    setLinkRelation(relation)
+    setLinkSearch('')
+    setLinkModalOpen(true)
+  }
+
   async function handleRemoveLink(edgeId: number) {
     const previous = links
     setLinks(prev => prev.filter(link => link.edge_id !== edgeId))
@@ -490,14 +530,57 @@ export default function NodeDetail() {
         </div>
       </div>
 
+      {linksLoading && <p>Loading links…</p>}
+      {linksError && <p style={{ color: '#f87171' }}>{linksError}</p>}
+
+      <section className="stack-sm">
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h3>Dependencies</h3>
+          <button type="button" onClick={() => openLinkModal('depends_on')} className="button button--ghost">
+            Add dependency
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: 12,
+          }}
+        >
+          <div className="card" style={{ display: 'grid', gap: 8 }}>
+            <strong>Depends on</strong>
+            {dependencyOutgoing.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No dependencies yet.</span>}
+            {dependencyOutgoing.map(link => (
+              <div key={link.edge_id} className="row" style={{ justifyContent: 'space-between' }}>
+                <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
+                  {link.other_node_title}
+                </Link>
+                <button type="button" onClick={() => handleRemoveLink(link.edge_id)} className="button button--ghost">Remove</button>
+              </div>
+            ))}
+          </div>
+
+          <div className="card" style={{ display: 'grid', gap: 8 }}>
+            <strong>Required by</strong>
+            {dependencyIncoming.length === 0 && <span className="muted" style={{ fontSize: 12 }}>Nothing depends on this yet.</span>}
+            {dependencyIncoming.map(link => (
+              <div key={link.edge_id} className="row" style={{ justifyContent: 'space-between' }}>
+                <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
+                  {link.other_node_title}
+                </Link>
+                <span className="muted" style={{ fontSize: 11 }}>depends on</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section className="stack-sm">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h3>Links</h3>
-          <button type="button" onClick={() => setLinkModalOpen(true)} className="button button--ghost">Link to…</button>
+          <button type="button" onClick={() => openLinkModal('related')} className="button button--ghost">Link to…</button>
         </div>
-
-        {linksLoading && <p>Loading links…</p>}
-        {linksError && <p style={{ color: '#f87171' }}>{linksError}</p>}
 
         <div
           style={{
@@ -508,35 +591,41 @@ export default function NodeDetail() {
         >
           <div className="card" style={{ display: 'grid', gap: 8 }}>
             <strong>Outgoing</strong>
-            {outgoingLinks.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No links yet.</span>}
-            {outgoingLinks.map(link => (
-              <div
-                key={link.edge_id}
-                className="row"
-                style={{ justifyContent: 'space-between' }}
-              >
-                <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
-                  {link.other_node_title}
-                </Link>
-                <div className="row">
-                  <span className="muted" style={{ fontSize: 11 }}>{link.relation}</span>
-                  <button type="button" onClick={() => handleRemoveLink(link.edge_id)} className="button button--ghost">Remove</button>
+            {otherOutgoing.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No links yet.</span>}
+            {otherOutgoing.map(link => {
+              const label = RELATION_LABELS[link.relation as Relation] ?? link.relation
+              return (
+                <div
+                  key={link.edge_id}
+                  className="row"
+                  style={{ justifyContent: 'space-between' }}
+                >
+                  <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
+                    {link.other_node_title}
+                  </Link>
+                  <div className="row">
+                    <span className="muted" style={{ fontSize: 11 }}>{label}</span>
+                    <button type="button" onClick={() => handleRemoveLink(link.edge_id)} className="button button--ghost">Remove</button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           <div className="card" style={{ display: 'grid', gap: 8 }}>
             <strong>Backlinks</strong>
-            {incomingLinks.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No backlinks yet.</span>}
-            {incomingLinks.map(link => (
-              <div key={link.edge_id} className="row" style={{ justifyContent: 'space-between' }}>
-                <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
-                  {link.other_node_title}
-                </Link>
-                <span className="muted" style={{ fontSize: 11 }}>{link.relation}</span>
-              </div>
-            ))}
+            {otherIncoming.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No backlinks yet.</span>}
+            {otherIncoming.map(link => {
+              const label = RELATION_LABELS[link.relation as Relation] ?? link.relation
+              return (
+                <div key={link.edge_id} className="row" style={{ justifyContent: 'space-between' }}>
+                  <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
+                    {link.other_node_title}
+                  </Link>
+                  <span className="muted" style={{ fontSize: 11 }}>{label}</span>
+                </div>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -564,9 +653,10 @@ export default function NodeDetail() {
                 className="select"
               >
                 {RELATIONS.map(option => (
-                  <option key={option} value={option}>{option}</option>
+                  <option key={option} value={option}>{RELATION_LABELS[option]}</option>
                 ))}
               </select>
+              <span className="muted" style={{ fontSize: 12 }}>{RELATION_HINTS[linkRelation]}</span>
             </div>
 
             {linkLoading && <span className="muted" style={{ fontSize: 12 }}>Loading…</span>}
