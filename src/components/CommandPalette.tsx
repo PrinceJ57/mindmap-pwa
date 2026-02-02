@@ -266,12 +266,6 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
       action: () => navigate('/capture?type=task&status=inbox'),
     },
     {
-      id: 'go-home',
-      label: 'Go: Home',
-      kind: 'command',
-      action: () => navigate('/home'),
-    },
-    {
       id: 'go-board',
       label: 'Go: Board',
       kind: 'command',
@@ -294,12 +288,6 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
       label: 'Go: Import',
       kind: 'command',
       action: () => navigate('/import'),
-    },
-    {
-      id: 'go-search',
-      label: 'Go: Search',
-      kind: 'command',
-      action: () => navigate('/search'),
     },
   ], [navigate])
 

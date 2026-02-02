@@ -13,7 +13,6 @@ import InstallPrompt, { type BeforeInstallPromptEvent } from '../components/Inst
 type SaveMessage = { tone: 'success' | 'offline' | 'error'; text: string }
 
 const INSTALL_DISMISS_KEY = 'mm_install_hint_dismissed'
-const CAPTURE_LINK_COPIED_KEY = 'mm_capture_link_copied'
 
 function tokenize(input: string) {
   return input.trim().split(/\s+/).filter(Boolean)
@@ -112,24 +111,6 @@ function buildPrefillInput() {
   }
 
   return { text, prefilled: true, autosave, isShared }
-}
-
-function buildCaptureUrl(options: {
-  title: string
-  body: string
-  tags: string[]
-  context?: string
-  status?: string
-  type?: string
-}) {
-  const url = new URL('/capture', window.location.origin)
-  if (options.title) url.searchParams.set('title', options.title)
-  if (options.body) url.searchParams.set('body', options.body)
-  if (options.tags.length > 0) url.searchParams.set('tags', options.tags.join(','))
-  if (options.context) url.searchParams.set('context', options.context)
-  if (options.status) url.searchParams.set('status', options.status)
-  if (options.type) url.searchParams.set('type', options.type)
-  return url.toString()
 }
 
 function extractFirstUrl(text: string) {
@@ -450,37 +431,6 @@ export default function Capture() {
     }
   }
 
-  async function handleCopyLink() {
-    const url = buildCaptureUrl({
-      title: parsed.title.trim(),
-      body,
-      tags: parsed.tags,
-      context: parsed.context,
-      status: parsed.status,
-      type: parsed.type,
-    })
-    try {
-      await navigator.clipboard.writeText(url)
-      localStorage.setItem(CAPTURE_LINK_COPIED_KEY, String(Date.now()))
-      setSaveMessage({ tone: 'success', text: 'Capture link copied.' })
-    } catch {
-      setSaveMessage({ tone: 'error', text: 'Unable to copy capture link.' })
-    }
-  }
-
-  async function handleCopyLinkWithText() {
-    const raw = rawInput.trim()
-    const url = new URL('/capture', window.location.origin)
-    if (raw) url.searchParams.set('text', raw)
-    try {
-      await navigator.clipboard.writeText(url.toString())
-      localStorage.setItem(CAPTURE_LINK_COPIED_KEY, String(Date.now()))
-      setSaveMessage({ tone: 'success', text: 'Capture link with text copied.' })
-    } catch {
-      setSaveMessage({ tone: 'error', text: 'Unable to copy capture link.' })
-    }
-  }
-
   function applySuggestedTags() {
     if (suggestedTags.length === 0) return
     setRawInput(prev => {
@@ -616,20 +566,6 @@ export default function Capture() {
             className="button button--ghost"
           >
             Clear
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCopyLink()}
-            className="button button--ghost"
-          >
-            Copy capture link
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCopyLinkWithText()}
-            className="button button--ghost"
-          >
-            Copy link with text
           </button>
         </div>
 
