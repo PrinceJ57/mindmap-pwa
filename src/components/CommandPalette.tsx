@@ -278,6 +278,12 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
       action: () => navigate('/outline'),
     },
     {
+      id: 'go-mindmap',
+      label: 'Go: Mindmap',
+      kind: 'command',
+      action: () => navigate('/mindmap'),
+    },
+    {
       id: 'go-review',
       label: 'Go: Review',
       kind: 'command',

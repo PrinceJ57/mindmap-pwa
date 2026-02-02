@@ -13,6 +13,7 @@ const Login = lazy(() => import('./pages/Login'))
 const Capture = lazy(() => import('./pages/Capture'))
 const Board = lazy(() => import('./pages/Board'))
 const Outline = lazy(() => import('./pages/Outline'))
+const Mindmap = lazy(() => import('./pages/Mindmap'))
 const NodeDetail = lazy(() => import('./pages/NodeDetail'))
 const Review = lazy(() => import('./pages/Review'))
 const Import = lazy(() => import('./pages/Import'))
@@ -101,6 +102,9 @@ export default function App() {
               <NavLink to="/outline" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
                 Outline
               </NavLink>
+              <NavLink to="/mindmap" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+                Mindmap
+              </NavLink>
               <NavLink to="/review" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
                 Review
               </NavLink>
@@ -147,6 +151,7 @@ export default function App() {
             <Route path="/search" element={signedIn ? <Navigate to="/capture" replace /> : <Navigate to="/login" />} />
             <Route path="/board" element={signedIn ? <Board /> : <Navigate to="/login" />} />
             <Route path="/outline" element={signedIn ? <Outline /> : <Navigate to="/login" />} />
+            <Route path="/mindmap" element={signedIn ? <Mindmap /> : <Navigate to="/login" />} />
             <Route path="/review" element={signedIn ? <Review /> : <Navigate to="/login" />} />
             <Route path="/import" element={signedIn ? <Import /> : <Navigate to="/login" />} />
             <Route path="/node/:id" element={signedIn ? <NodeDetail /> : <Navigate to="/login" />} />
