@@ -2,21 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../supabaseClient'
 import { enqueuePayload, errorToString, getQueueCount, onQueueUpdate, shouldQueueError, syncOfflineQueue, type SaveNodeError } from '../offlineQueue'
 import { createNodeWithTags, type NodeWritePayload } from '../lib/nodeWrites'
-import { parseQuickAdd, normalizeTokenValue, isValidDueDate } from '../lib/quickAddParse'
-import { CAPTURE_PREFILL_STORAGE_KEY, parsePrefillParams } from '../lib/queryPrefill'
-import { STATUSES } from '../utils/status'
-import CaptureTemplates from '../components/CaptureTemplates'
-import CapturePreview from '../components/CapturePreview'
+import { normalizeTag } from '../utils/tagUtils'
+import TagChips from '../components/TagChips'
 import RecentCaptures, { type RecentRow } from '../components/RecentCaptures'
 import InstallPrompt, { type BeforeInstallPromptEvent } from '../components/InstallPrompt'
 
 type SaveMessage = { tone: 'success' | 'offline' | 'error'; text: string }
 
 const INSTALL_DISMISS_KEY = 'mm_install_hint_dismissed'
-
-function tokenize(input: string) {
-  return input.trim().split(/\s+/).filter(Boolean)
-}
 
 function splitInput(raw: string) {
   const parts = raw.split(/\r?\n/)
@@ -25,122 +18,32 @@ function splitInput(raw: string) {
   return { headline, body }
 }
 
-function looksLikeBareDomain(value: string) {
-  if (!value) return false
-  if (value.startsWith('http://') || value.startsWith('https://')) return false
-  if (value.includes(' ')) return false
-  return /^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+([/?#][^\s]*)?$/i.test(value)
-}
+function extractTagsAndTitle(headline: string) {
+  const tokens = headline.trim().split(/\s+/).filter(Boolean)
+  const tags: string[] = []
+  const titleParts: string[] = []
 
-function normalizeSharedText(input: string) {
-  const { headline, body } = splitInput(input)
-  const trimmedHeadline = headline.trim()
-  if (looksLikeBareDomain(trimmedHeadline)) {
-    const nextHeadline = `https://${trimmedHeadline}`
-    return body ? `${nextHeadline}\n${body}` : nextHeadline
-  }
-  return input
-}
-
-function ensureSharedTag(input: string) {
-  const { headline, body } = splitInput(input)
-  const hasTag = /(^|\s)#shared_ios(\s|$)/i.test(headline)
-  if (hasTag) return input
-  const nextHeadline = headline.trim() ? `${headline.trim()} #shared_ios` : '#shared_ios'
-  return body ? `${nextHeadline}\n${body}` : nextHeadline
-}
-
-function buildPrefillInput() {
-  const search = window.location.search
-  const rawParams = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
-  const source = rawParams.get('source') ?? ''
-  const isShared = source === 'ios_share'
-  const autosave = rawParams.get('autosave') === '1'
-  const textParam = rawParams.get('text')
-  if (textParam && textParam.trim()) {
-    let decoded = textParam.replace(/\+/g, ' ')
-    if (isShared) {
-      decoded = normalizeSharedText(decoded)
-      decoded = ensureSharedTag(decoded)
-    }
-    window.sessionStorage.removeItem(CAPTURE_PREFILL_STORAGE_KEY)
-    if (search) {
-      const next = window.location.pathname + window.location.hash
-      window.history.replaceState(null, '', next)
-    }
-    return { text: decoded, prefilled: true, autosave, isShared }
-  }
-  let prefill = parsePrefillParams(search)
-
-  if (!prefill.hasPrefill) {
-    const stored = window.sessionStorage.getItem(CAPTURE_PREFILL_STORAGE_KEY)
-    if (stored) {
-      prefill = parsePrefillParams(stored)
-      if (!prefill.hasPrefill) {
-        window.sessionStorage.removeItem(CAPTURE_PREFILL_STORAGE_KEY)
+  for (const token of tokens) {
+    if (token.startsWith('#') && token.length > 1) {
+      const tag = normalizeTag(token.slice(1))
+      if (tag && !tags.includes(tag)) {
+        tags.push(tag)
       }
+    } else {
+      titleParts.push(token)
     }
   }
 
-  if (!prefill.hasPrefill) return { text: '', prefilled: false, autosave: false, isShared: false }
-
-  const baseTags = isShared
-    ? prefill.tags.filter(tag => tag !== 'dictated')
-    : prefill.tags
-  const tags = isShared
-    ? (baseTags.includes('shared_ios') ? baseTags : [...baseTags, 'shared_ios'])
-    : baseTags
-
-  const tokens: string[] = []
-  if (prefill.title) tokens.push(prefill.title)
-  if (prefill.context) tokens.push(`@${prefill.context}`)
-  if (prefill.status) tokens.push(`!${prefill.status}`)
-  if (prefill.type) tokens.push(`type:${prefill.type}`)
-  if (tags.length > 0) {
-    tokens.push(...tags.map(tag => `#${tag}`))
+  return {
+    title: titleParts.join(' ').trim(),
+    tags,
   }
-
-  const headline = tokens.join(' ').trim()
-  const body = prefill.body.trim()
-  const text = body ? `${headline}\n${body}`.trim() : headline
-
-  window.sessionStorage.removeItem(CAPTURE_PREFILL_STORAGE_KEY)
-  if (search) {
-    const next = window.location.pathname + window.location.hash
-    window.history.replaceState(null, '', next)
-  }
-
-  return { text, prefilled: true, autosave, isShared }
-}
-
-function extractFirstUrl(text: string) {
-  const match = text.match(/https?:\/\/[^\s]+/i)
-    ?? text.match(/www\.[^\s]+/i)
-    ?? text.match(/(^|[\s(])((?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s]*)?)/i)
-  if (!match) return null
-  const raw = match[2] ?? match[0]
-  const withScheme = raw.startsWith('http') ? raw : `https://${raw}`
-  try {
-    return new URL(withScheme)
-  } catch {
-    return null
-  }
-}
-
-function domainTagFromHost(host: string) {
-  const cleaned = host.replace(/^www\./i, '').toLowerCase()
-  const parts = cleaned.split('.')
-  if (parts.length >= 2) return parts[0]
-  return cleaned
 }
 
 export default function Capture() {
   const [rawInput, setRawInput] = useState('')
   const [saveMessage, setSaveMessage] = useState<SaveMessage | null>(null)
   const [saving, setSaving] = useState(false)
-  const [prefilled, setPrefilled] = useState(false)
-  const [autosaveRequested, setAutosaveRequested] = useState(false)
-  const [sharePrefill, setSharePrefill] = useState(false)
   const [queueCount, setQueueCount] = useState(0)
   const [syncing, setSyncing] = useState(false)
   const [recent, setRecent] = useState<RecentRow[]>([])
@@ -148,78 +51,13 @@ export default function Capture() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [installDismissed, setInstallDismissed] = useState(false)
   const [online, setOnline] = useState(true)
+  const [showPreview, setShowPreview] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
-  const autosaveOnceRef = useRef(false)
-  const autoTitleRef = useRef(false)
 
   const { headline, body } = useMemo(() => splitInput(rawInput), [rawInput])
-  const parsed = useMemo(() => parseQuickAdd(headline), [headline])
-  const linkInfo = useMemo(() => {
-    const url = extractFirstUrl(rawInput)
-    if (!url) return null
-    const hostname = url.hostname
-    const domainTag = domainTagFromHost(hostname)
-    const path = url.pathname && url.pathname !== '/' ? url.pathname.replace(/\/$/, '') : ''
-    const suggestedTitle = path ? `${hostname} — ${path}` : hostname
-    return {
-      url: url.toString(),
-      hostname,
-      domainTag,
-      suggestedTitle,
-    }
-  }, [rawInput])
+  const { title, tags } = useMemo(() => extractTagsAndTitle(headline), [headline])
 
-  const validation = useMemo(() => {
-    const tokens = tokenize(headline)
-    const errors: string[] = []
-    const warnings: string[] = []
-
-    if (!parsed.title.trim()) {
-      errors.push('Title required.')
-    }
-
-    const invalidDueTokens = tokens
-      .filter(token => token.toLowerCase().startsWith('due:'))
-      .map(token => normalizeTokenValue(token.slice(4)))
-      .filter(value => !value || !isValidDueDate(value))
-
-    if (invalidDueTokens.length > 0) {
-      errors.push(`Invalid due date: ${invalidDueTokens.join(', ')}`)
-    }
-
-    const invalidTypeTokens = tokens
-      .filter(token => token.toLowerCase().startsWith('type:'))
-      .map(token => normalizeTokenValue(token.slice(5)).toLowerCase())
-      .filter(value => value && value !== 'idea' && value !== 'task')
-
-    if (invalidTypeTokens.length > 0) {
-      warnings.push(`Unknown type ignored: ${invalidTypeTokens.join(', ')}`)
-    }
-
-    const invalidStatusTokens = tokens
-      .filter(token => token.startsWith('!'))
-      .map(token => normalizeTokenValue(token.slice(1)).toLowerCase())
-      .filter(value => value && !(STATUSES as readonly string[]).includes(value))
-
-    if (invalidStatusTokens.length > 0) {
-      warnings.push(`Unknown status ignored: ${invalidStatusTokens.join(', ')}`)
-    }
-
-    const titleTokens = tokens.filter(token => token.toLowerCase().startsWith('title:'))
-    if (titleTokens.length > 0) {
-      const hasTitleValue = titleTokens.some(token => normalizeTokenValue(token.slice(6)))
-      if (!hasTitleValue) warnings.push('title: token needs text')
-    }
-
-    return { errors, warnings }
-  }, [headline, parsed.title])
-
-  const canSubmit = validation.errors.length === 0 && parsed.title.trim() !== '' && !saving
-  const suggestedTags = useMemo(() => {
-    if (!linkInfo) return []
-    const tags = ['link', linkInfo.domainTag]
-    return tags.filter(tag => tag && !parsed.tags.includes(tag))
-  }, [linkInfo, parsed.tags])
+  const canSubmit = title.trim() !== '' && !saving
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -261,42 +99,6 @@ export default function Capture() {
       window.removeEventListener('offline', updateOnline)
     }
   }, [])
-
-  useEffect(() => {
-    const { text, prefilled, autosave, isShared } = buildPrefillInput()
-    if (prefilled && text) {
-      setRawInput(text)
-      setPrefilled(true)
-    }
-    setAutosaveRequested(autosave)
-    setSharePrefill(isShared)
-    autosaveOnceRef.current = false
-    autoTitleRef.current = false
-  }, [])
-
-  useEffect(() => {
-    if (!sharePrefill) return
-    if (autoTitleRef.current) return
-    if (parsed.title.trim()) return
-    const fallbackLine = body.split(/\r?\n/)[0]?.trim() ?? ''
-    const candidate = linkInfo?.suggestedTitle ?? fallbackLine
-    if (!candidate) return
-    autoTitleRef.current = true
-    setRawInput(prev => {
-      const { headline, body } = splitInput(prev)
-      const trimmedHeadline = headline.trim()
-      const nextHeadline = trimmedHeadline ? `${candidate} ${trimmedHeadline}` : candidate
-      return body ? `${nextHeadline}\n${body}` : nextHeadline
-    })
-  }, [sharePrefill, parsed.title, linkInfo, body])
-
-  useEffect(() => {
-    if (!autosaveRequested) return
-    if (autosaveOnceRef.current) return
-    if (!canSubmit) return
-    autosaveOnceRef.current = true
-    void handleSave()
-  }, [autosaveRequested, canSubmit])
 
   const loadRecent = useCallback(async () => {
     setRecentLoading(true)
@@ -349,7 +151,7 @@ export default function Capture() {
 
   async function handleSave() {
     if (!canSubmit) {
-      setSaveMessage({ tone: 'error', text: 'Fix the Quick Add errors before saving.' })
+      setSaveMessage({ tone: 'error', text: 'Please enter something to capture.' })
       return
     }
 
@@ -363,16 +165,17 @@ export default function Capture() {
       return
     }
 
+    // All captures go to inbox as ideas - refine later in Inbox
     const payload: NodeWritePayload = {
-      type: parsed.type ?? 'idea',
-      title: parsed.title.trim(),
+      type: 'idea',
+      title: title.trim(),
       body: body,
-      tags: parsed.tags,
-      status: parsed.status ?? 'inbox',
-      context: parsed.context ? parsed.context : null,
+      tags: tags,
+      status: 'inbox',
+      context: null,
       energy: null,
       duration_minutes: null,
-      due_at: parsed.due_at ?? null,
+      due_at: null,
     }
 
     try {
@@ -384,7 +187,7 @@ export default function Capture() {
       })
 
       setRawInput('')
-      setSaveMessage({ tone: 'success', text: 'Saved ✅' })
+      setSaveMessage({ tone: 'success', text: 'Captured!' })
       void loadRecent()
     } catch (error) {
       const saveError = error as SaveNodeError
@@ -392,7 +195,7 @@ export default function Capture() {
       if (shouldQueue) {
         enqueuePayload(payload, errorToString(saveError))
         setRawInput('')
-        setSaveMessage({ tone: 'offline', text: 'Queued offline; will sync.' })
+        setSaveMessage({ tone: 'offline', text: 'Saved offline; will sync.' })
         setQueueCount(getQueueCount())
         return
       }
@@ -431,33 +234,12 @@ export default function Capture() {
     }
   }
 
-  function applySuggestedTags() {
-    if (suggestedTags.length === 0) return
-    setRawInput(prev => {
-      const { headline, body } = splitInput(prev)
-      const tokenString = suggestedTags.map(tag => `#${tag}`).join(' ')
-      const nextHeadline = headline.trim() ? `${tokenString} ${headline}` : tokenString
-      return body ? `${nextHeadline}\n${body}` : nextHeadline
-    })
-    inputRef.current?.focus()
-  }
-
-  function applySuggestedTitle() {
-    if (!linkInfo) return
-    setRawInput(prev => {
-      const { headline, body } = splitInput(prev)
-      const nextHeadline = headline.trim() ? `${linkInfo.suggestedTitle} ${headline}` : linkInfo.suggestedTitle
-      return body ? `${nextHeadline}\n${body}` : nextHeadline
-    })
-    inputRef.current?.focus()
-  }
-
   return (
     <div className="stack capturePage">
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
         <div className="stack-sm">
           <h2>Capture</h2>
-          <span className="muted" style={{ fontSize: 12 }}>Quick entry with tokens. Shift+Enter for notes.</span>
+          <span className="muted" style={{ fontSize: 12 }}>Quick brain dump. Add #tags if you want. Refine later.</span>
         </div>
         <div className="row row--wrap">
           {queueCount > 0 && (
@@ -476,22 +258,7 @@ export default function Capture() {
 
       {!online && (
         <div className="card" style={{ borderColor: 'rgba(245, 158, 11, 0.6)', background: 'rgba(245, 158, 11, 0.12)' }}>
-          Offline mode: captures will be queued and synced when you’re back online.
-        </div>
-      )}
-
-      {prefilled && (
-        <div
-          className="card row row--wrap"
-          style={{ background: 'rgba(37, 99, 235, 0.15)', borderColor: 'rgba(37, 99, 235, 0.45)' }}
-        >
-          <span>Prefilled from Shortcut</span>
-          <button
-            onClick={() => setRawInput('')}
-            className="button button--ghost"
-          >
-            Clear
-          </button>
+          Offline mode: captures will be queued and synced when you're back online.
         </div>
       )}
 
@@ -508,18 +275,6 @@ export default function Capture() {
       )}
 
       <div className="card captureComposer">
-        <CaptureTemplates
-          onApply={(token) => {
-            setRawInput(prev => {
-              const next = prev.trim().length > 0
-                ? `${token}${prev}`.trimStart()
-                : token
-              return next
-            })
-          }}
-          inputRef={inputRef}
-        />
-
         <textarea
           ref={inputRef}
           value={rawInput}
@@ -535,21 +290,51 @@ export default function Capture() {
               }
             }
           }}
-          placeholder="What’s on your mind? Use #tags, @context, !status, type:task, due:YYYY-MM-DD"
-          rows={5}
+          placeholder="What's on your mind? Add #tags if you want."
+          rows={4}
           className="textarea captureInput"
           aria-label="Quick capture input"
         />
 
-        <CapturePreview
-          parsed={parsed}
-          body={body}
-          linkInfo={linkInfo}
-          suggestedTags={suggestedTags}
-          validation={validation}
-          onApplySuggestedTags={applySuggestedTags}
-          onApplySuggestedTitle={applySuggestedTitle}
-        />
+        {/* Minimal preview - collapsed by default */}
+        {tags.length > 0 && !showPreview && (
+          <div className="row" style={{ fontSize: 12, gap: 8 }}>
+            <span className="muted">{tags.length} tag{tags.length !== 1 ? 's' : ''} detected</span>
+            <button
+              type="button"
+              onClick={() => setShowPreview(true)}
+              className="button button--ghost"
+              style={{ padding: '2px 8px', fontSize: 11 }}
+            >
+              Show preview
+            </button>
+          </div>
+        )}
+
+        {showPreview && (
+          <div className="capturePreview" style={{ padding: 12, background: 'var(--bg-secondary)', borderRadius: 6 }}>
+            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+              <span className="muted" style={{ fontSize: 11 }}>Preview</span>
+              <button
+                type="button"
+                onClick={() => setShowPreview(false)}
+                className="button button--ghost"
+                style={{ padding: '2px 8px', fontSize: 11 }}
+              >
+                Hide
+              </button>
+            </div>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>
+              {title || <span className="muted">Enter your idea…</span>}
+            </div>
+            {tags.length > 0 && <TagChips tags={tags} compact />}
+            {body && (
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Notes: {body.slice(0, 80)}{body.length > 80 ? '…' : ''}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="row row--wrap">
           <button
@@ -558,7 +343,7 @@ export default function Capture() {
             disabled={!canSubmit}
             style={{ flex: '1 1 160px' }}
           >
-            {saving ? 'Saving…' : 'Save'}
+            {saving ? 'Saving…' : 'Capture'}
           </button>
           <button
             type="button"

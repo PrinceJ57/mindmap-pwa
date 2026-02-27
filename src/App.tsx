@@ -106,7 +106,7 @@ export default function App() {
                 Mindmap
               </NavLink>
               <NavLink to="/review" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
-                Review
+                Inbox
               </NavLink>
               <NavLink to="/import" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
                 Import
