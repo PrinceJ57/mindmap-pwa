@@ -9,6 +9,7 @@ import { normalizeTag } from '../utils/tagUtils'
 import {
   areFiltersEqual,
   filtersToSearchParams,
+  filtersToQueryString,
   normalizeViewFilters,
   parseFiltersFromSearchParams,
   type ViewFilters,
@@ -498,7 +499,12 @@ export default function Outline() {
 
   return (
     <div className="stack">
-      <h2>Outline</h2>
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <h2>Outline</h2>
+        <Link to={`/mindmap${filtersToQueryString(currentFilters)}`} className="button button--ghost">
+          Mindmap view
+        </Link>
+      </div>
 
       <div className="stack-sm">
         <input

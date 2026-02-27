@@ -5,14 +5,29 @@ import { addRecentNode } from '../lib/recentNodes'
 import TagInput from '../components/TagInput'
 import TagChips from '../components/TagChips'
 import { useToast } from '../components/Toast'
+import { buildSuggestionQuery, suggestEdges, type EdgeSuggestion, type SuggestionNode } from '../lib/edgeSuggestions'
 import { STATUSES, type Status } from '../utils/status'
 import { normalizeTag } from '../utils/tagUtils'
 
 type NodeType = 'idea' | 'task'
 
-const RELATIONS = ['related', 'supports', 'blocks', 'depends_on'] as const
+const RELATIONS = ['depends_on', 'related', 'supports', 'blocks'] as const
 
 type Relation = typeof RELATIONS[number]
+
+const RELATION_LABELS: Record<Relation, string> = {
+  depends_on: 'Depends on',
+  related: 'Related',
+  supports: 'Supports',
+  blocks: 'Blocks',
+}
+
+const RELATION_HINTS: Record<Relation, string> = {
+  depends_on: 'This node depends on the selected node.',
+  related: 'A loose, bidirectional relationship.',
+  supports: 'This node supports the selected node.',
+  blocks: 'This node blocks the selected node.',
+}
 
 type NodeRecord = {
   id: number
@@ -46,6 +61,7 @@ type NodeListRow = {
   title: string
   type: string
   status: string
+  body?: string | null
   tags?: string[] | null
 }
 
@@ -81,6 +97,12 @@ export default function NodeDetail() {
   const [linkLoading, setLinkLoading] = useState(false)
   const [linkRelation, setLinkRelation] = useState<Relation>('related')
   const [linkWorking, setLinkWorking] = useState(false)
+
+  const [suggestionPool, setSuggestionPool] = useState<NodeListRow[]>([])
+  const [suggestionLoading, setSuggestionLoading] = useState(false)
+  const [suggestionError, setSuggestionError] = useState<string | null>(null)
+  const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<Set<number>>(new Set())
+  const [suggestionRefreshKey, setSuggestionRefreshKey] = useState(0)
 
   const invalidId = Number.isNaN(nodeId) || nodeId <= 0
 
@@ -150,6 +172,11 @@ export default function NodeDetail() {
   }, [nodeId, invalidId])
 
   useEffect(() => {
+    setDismissedSuggestionIds(new Set())
+    setSuggestionPool([])
+  }, [nodeId])
+
+  useEffect(() => {
     if (!linkModalOpen) return
     let active = true
 
@@ -187,6 +214,48 @@ export default function NodeDetail() {
     return () => { active = false }
   }, [linkModalOpen, linkSearch])
 
+  useEffect(() => {
+    if (!node) return
+    let active = true
+
+    async function loadSuggestionPool() {
+      setSuggestionLoading(true)
+      setSuggestionError(null)
+
+      const query = buildSuggestionQuery({ title, tags })
+      const { data, error } = await supabase.rpc('list_nodes', {
+        lim: 250,
+        q: query,
+        type_filter: null,
+        status_filter: null,
+        tag_filter: null,
+        pinned_only: false,
+        review_due_only: false,
+      })
+
+      if (!active) return
+
+      if (error) {
+        setSuggestionError(error.message)
+        setSuggestionPool([])
+        setSuggestionLoading(false)
+        return
+      }
+
+      const normalized = ((data ?? []) as NodeListRow[]).map(row => ({
+        ...row,
+        tags: Array.isArray(row.tags) ? row.tags.map(normalizeTag) : [],
+      }))
+
+      setSuggestionPool(normalized)
+      setSuggestionLoading(false)
+    }
+
+    loadSuggestionPool()
+
+    return () => { active = false }
+  }, [node?.id, suggestionRefreshKey])
+
   const outgoingLinks = useMemo(
     () => links.filter(link => link.direction === 'outgoing'),
     [links]
@@ -197,6 +266,26 @@ export default function NodeDetail() {
     [links]
   )
 
+  const dependencyOutgoing = useMemo(
+    () => outgoingLinks.filter(link => link.relation === 'depends_on'),
+    [outgoingLinks]
+  )
+
+  const dependencyIncoming = useMemo(
+    () => incomingLinks.filter(link => link.relation === 'depends_on'),
+    [incomingLinks]
+  )
+
+  const otherOutgoing = useMemo(
+    () => outgoingLinks.filter(link => link.relation !== 'depends_on'),
+    [outgoingLinks]
+  )
+
+  const otherIncoming = useMemo(
+    () => incomingLinks.filter(link => link.relation !== 'depends_on'),
+    [incomingLinks]
+  )
+
   const outgoingKeySet = useMemo(() => {
     const set = new Set<string>()
     for (const link of outgoingLinks) {
@@ -204,6 +293,35 @@ export default function NodeDetail() {
     }
     return set
   }, [outgoingLinks])
+
+  const existingLinkedIds = useMemo(() => {
+    const set = new Set<number>()
+    for (const link of links) {
+      set.add(link.other_node_id)
+    }
+    return set
+  }, [links])
+
+  const { dependencies: dependencySuggestions, related: relatedSuggestions } = useMemo(() => {
+    if (!node) return { dependencies: [], related: [] }
+    const current: SuggestionNode = {
+      id: node.id,
+      title,
+      body,
+      status,
+      type,
+      tags,
+    }
+    const suggestions = suggestEdges({
+      current,
+      candidates: suggestionPool,
+      existingIds: existingLinkedIds,
+    })
+    return {
+      dependencies: suggestions.dependencies.filter(item => !dismissedSuggestionIds.has(item.id)),
+      related: suggestions.related.filter(item => !dismissedSuggestionIds.has(item.id)),
+    }
+  }, [node, title, body, status, type, tags, suggestionPool, existingLinkedIds, dismissedSuggestionIds])
 
   async function upsertTags(names: string[]) {
     const session = (await supabase.auth.getSession()).data.session
@@ -372,6 +490,20 @@ export default function NodeDetail() {
     setSaveMessage('Archived.')
   }
 
+  function openLinkModal(relation: Relation) {
+    setLinkRelation(relation)
+    setLinkSearch('')
+    setLinkModalOpen(true)
+  }
+
+  function dismissSuggestion(id: number) {
+    setDismissedSuggestionIds(prev => {
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+  }
+
   async function handleRemoveLink(edgeId: number) {
     const previous = links
     setLinks(prev => prev.filter(link => link.edge_id !== edgeId))
@@ -382,7 +514,7 @@ export default function NodeDetail() {
     }
   }
 
-  async function handleCreateLink(targetId: number) {
+  async function createEdge(targetId: number, relation: Relation) {
     if (!node) return
     if (targetId === node.id) return
     setLinkWorking(true)
@@ -390,25 +522,39 @@ export default function NodeDetail() {
     const { error } = await supabase.rpc('create_edge', {
       from_node_id: node.id,
       to_node_id: targetId,
-      relation: linkRelation,
+      relation,
     })
 
     if (error) {
       setLinkWorking(false)
       showToast('error', error.message)
-      return
+      return false
     }
-
-    setLinkWorking(false)
-    setLinkModalOpen(false)
-    setLinkSearch('')
 
     const { data, error: linksError } = await supabase.rpc('get_node_links', { node_id: node.id })
     if (linksError) {
       showToast('error', linksError.message)
-      return
+      setLinkWorking(false)
+      return false
     }
     setLinks((data ?? []) as LinkRow[])
+    setLinkWorking(false)
+    return true
+  }
+
+  async function handleCreateLink(targetId: number) {
+    const created = await createEdge(targetId, linkRelation)
+    if (!created) return
+    setLinkModalOpen(false)
+    setLinkSearch('')
+  }
+
+  async function handleCreateSuggestion(suggestion: EdgeSuggestion) {
+    const relation = suggestion.relation === 'depends_on' ? 'depends_on' : 'related'
+    const created = await createEdge(suggestion.id, relation)
+    if (created) {
+      dismissSuggestion(suggestion.id)
+    }
   }
 
   const createdAt = formatTimestamp(node?.created_at)
@@ -490,14 +636,159 @@ export default function NodeDetail() {
         </div>
       </div>
 
+      {linksLoading && <p>Loading links…</p>}
+      {linksError && <p style={{ color: '#f87171' }}>{linksError}</p>}
+
+      <section className="stack-sm">
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h3>Dependencies</h3>
+          <button type="button" onClick={() => openLinkModal('depends_on')} className="button button--ghost">
+            Add dependency
+          </button>
+        </div>
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: 12,
+          }}
+        >
+          <div className="card" style={{ display: 'grid', gap: 8 }}>
+            <strong>Depends on</strong>
+            {dependencyOutgoing.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No dependencies yet.</span>}
+            {dependencyOutgoing.map(link => (
+              <div key={link.edge_id} className="row" style={{ justifyContent: 'space-between' }}>
+                <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
+                  {link.other_node_title}
+                </Link>
+                <button type="button" onClick={() => handleRemoveLink(link.edge_id)} className="button button--ghost">Remove</button>
+              </div>
+            ))}
+          </div>
+
+          <div className="card" style={{ display: 'grid', gap: 8 }}>
+            <strong>Required by</strong>
+            {dependencyIncoming.length === 0 && <span className="muted" style={{ fontSize: 12 }}>Nothing depends on this yet.</span>}
+            {dependencyIncoming.map(link => (
+              <div key={link.edge_id} className="row" style={{ justifyContent: 'space-between' }}>
+                <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
+                  {link.other_node_title}
+                </Link>
+                <span className="muted" style={{ fontSize: 11 }}>depends on</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="stack-sm">
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <h3>Suggestions</h3>
+          <button
+            type="button"
+            onClick={() => setSuggestionRefreshKey(prev => prev + 1)}
+            className="button button--ghost"
+          >
+            Refresh
+          </button>
+        </div>
+        {suggestionLoading && <span className="muted" style={{ fontSize: 12 }}>Loading suggestions…</span>}
+        {suggestionError && <span style={{ color: '#f87171' }}>{suggestionError}</span>}
+        {!suggestionLoading && !suggestionError && dependencySuggestions.length === 0 && relatedSuggestions.length === 0 && (
+          <span className="muted" style={{ fontSize: 12 }}>No suggestions yet.</span>
+        )}
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+            gap: 12,
+          }}
+        >
+          <div className="card" style={{ display: 'grid', gap: 10 }}>
+            <strong>Suggested dependencies</strong>
+            {dependencySuggestions.length === 0 && (
+              <span className="muted" style={{ fontSize: 12 }}>None right now.</span>
+            )}
+            {dependencySuggestions.map(item => (
+              <div key={`dep-suggest-${item.id}`} className="stack-sm">
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <Link to={`/node/${item.id}`} style={{ fontSize: 14 }}>
+                    {item.title}
+                  </Link>
+                  <div className="row">
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateSuggestion(item)}
+                      disabled={linkWorking}
+                      className="button button--primary"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => dismissSuggestion(item.id)}
+                      className="button button--ghost"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+                {item.reasons.length > 0 && (
+                  <div className="muted" style={{ fontSize: 11 }}>
+                    {item.reasons.join(' • ')}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="card" style={{ display: 'grid', gap: 10 }}>
+            <strong>Suggested related links</strong>
+            {relatedSuggestions.length === 0 && (
+              <span className="muted" style={{ fontSize: 12 }}>None right now.</span>
+            )}
+            {relatedSuggestions.map(item => (
+              <div key={`rel-suggest-${item.id}`} className="stack-sm">
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <Link to={`/node/${item.id}`} style={{ fontSize: 14 }}>
+                    {item.title}
+                  </Link>
+                  <div className="row">
+                    <button
+                      type="button"
+                      onClick={() => void handleCreateSuggestion(item)}
+                      disabled={linkWorking}
+                      className="button button--primary"
+                    >
+                      Link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => dismissSuggestion(item.id)}
+                      className="button button--ghost"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+                {item.reasons.length > 0 && (
+                  <div className="muted" style={{ fontSize: 11 }}>
+                    {item.reasons.join(' • ')}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section className="stack-sm">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h3>Links</h3>
-          <button type="button" onClick={() => setLinkModalOpen(true)} className="button button--ghost">Link to…</button>
+          <button type="button" onClick={() => openLinkModal('related')} className="button button--ghost">Link to…</button>
         </div>
-
-        {linksLoading && <p>Loading links…</p>}
-        {linksError && <p style={{ color: '#f87171' }}>{linksError}</p>}
 
         <div
           style={{
@@ -508,35 +799,41 @@ export default function NodeDetail() {
         >
           <div className="card" style={{ display: 'grid', gap: 8 }}>
             <strong>Outgoing</strong>
-            {outgoingLinks.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No links yet.</span>}
-            {outgoingLinks.map(link => (
-              <div
-                key={link.edge_id}
-                className="row"
-                style={{ justifyContent: 'space-between' }}
-              >
-                <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
-                  {link.other_node_title}
-                </Link>
-                <div className="row">
-                  <span className="muted" style={{ fontSize: 11 }}>{link.relation}</span>
-                  <button type="button" onClick={() => handleRemoveLink(link.edge_id)} className="button button--ghost">Remove</button>
+            {otherOutgoing.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No links yet.</span>}
+            {otherOutgoing.map(link => {
+              const label = RELATION_LABELS[link.relation as Relation] ?? link.relation
+              return (
+                <div
+                  key={link.edge_id}
+                  className="row"
+                  style={{ justifyContent: 'space-between' }}
+                >
+                  <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
+                    {link.other_node_title}
+                  </Link>
+                  <div className="row">
+                    <span className="muted" style={{ fontSize: 11 }}>{label}</span>
+                    <button type="button" onClick={() => handleRemoveLink(link.edge_id)} className="button button--ghost">Remove</button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           <div className="card" style={{ display: 'grid', gap: 8 }}>
             <strong>Backlinks</strong>
-            {incomingLinks.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No backlinks yet.</span>}
-            {incomingLinks.map(link => (
-              <div key={link.edge_id} className="row" style={{ justifyContent: 'space-between' }}>
-                <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
-                  {link.other_node_title}
-                </Link>
-                <span className="muted" style={{ fontSize: 11 }}>{link.relation}</span>
-              </div>
-            ))}
+            {otherIncoming.length === 0 && <span className="muted" style={{ fontSize: 12 }}>No backlinks yet.</span>}
+            {otherIncoming.map(link => {
+              const label = RELATION_LABELS[link.relation as Relation] ?? link.relation
+              return (
+                <div key={link.edge_id} className="row" style={{ justifyContent: 'space-between' }}>
+                  <Link to={`/node/${link.other_node_id}`} style={{ fontSize: 14 }}>
+                    {link.other_node_title}
+                  </Link>
+                  <span className="muted" style={{ fontSize: 11 }}>{label}</span>
+                </div>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -564,9 +861,10 @@ export default function NodeDetail() {
                 className="select"
               >
                 {RELATIONS.map(option => (
-                  <option key={option} value={option}>{option}</option>
+                  <option key={option} value={option}>{RELATION_LABELS[option]}</option>
                 ))}
               </select>
+              <span className="muted" style={{ fontSize: 12 }}>{RELATION_HINTS[linkRelation]}</span>
             </div>
 
             {linkLoading && <span className="muted" style={{ fontSize: 12 }}>Loading…</span>}

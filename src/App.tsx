@@ -11,11 +11,10 @@ import { ToastProvider } from './components/Toast'
 // Lazy-loaded page components for code splitting
 const Login = lazy(() => import('./pages/Login'))
 const Capture = lazy(() => import('./pages/Capture'))
-const Search = lazy(() => import('./pages/Search'))
 const Board = lazy(() => import('./pages/Board'))
 const Outline = lazy(() => import('./pages/Outline'))
+const Mindmap = lazy(() => import('./pages/Mindmap'))
 const NodeDetail = lazy(() => import('./pages/NodeDetail'))
-const Home = lazy(() => import('./pages/Home'))
 const Review = lazy(() => import('./pages/Review'))
 const Import = lazy(() => import('./pages/Import'))
 
@@ -94,52 +93,49 @@ export default function App() {
         {signedIn && (
           <header className="nav">
             <div className="nav__inner">
-            <NavLink to="/home" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
-              Home
-            </NavLink>
-            <NavLink to="/capture" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
-              Capture
-            </NavLink>
-            <NavLink to="/search" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
-              Search
-            </NavLink>
-            <NavLink to="/board" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
-              Board
-            </NavLink>
-            <NavLink to="/outline" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
-              Outline
-            </NavLink>
-            <NavLink to="/review" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
-              Inbox
-            </NavLink>
-            <NavLink to="/import" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
-              Import
-            </NavLink>
+              <NavLink to="/capture" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+                Capture
+              </NavLink>
+              <NavLink to="/board" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+                Board
+              </NavLink>
+              <NavLink to="/outline" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+                Outline
+              </NavLink>
+              <NavLink to="/mindmap" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+                Mindmap
+              </NavLink>
+              <NavLink to="/review" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+                Inbox
+              </NavLink>
+              <NavLink to="/import" className={({ isActive }) => `nav__link ${isActive ? 'nav__link--active' : ''}`}>
+                Import
+              </NavLink>
 
-            {queueCount > 0 && (
-              <span aria-live="polite" className="badge">
-                Queued: {queueCount}
-              </span>
-            )}
+              {queueCount > 0 && (
+                <span aria-live="polite" className="badge">
+                  Queued: {queueCount}
+                </span>
+              )}
 
-            <button
-              type="button"
-              onClick={() => paletteRef.current?.open()}
-              className="nav__key"
-              aria-label="Open command palette"
-              title="Command palette (⌘K / Ctrl+K)"
-            >
-              ⌘K
-            </button>
+              <button
+                type="button"
+                onClick={() => paletteRef.current?.open()}
+                className="nav__key"
+                aria-label="Open command palette"
+                title="Command palette (⌘K / Ctrl+K)"
+              >
+                ⌘K
+              </button>
 
-            <button
-              onClick={() => void runSync()}
-              disabled={syncing || queueCount === 0}
-              className="button button--primary"
-              style={{ marginLeft: 'auto' }}
-            >
-              {syncing ? 'Syncing…' : 'Sync now'}
-            </button>
+              <button
+                onClick={() => void runSync()}
+                disabled={syncing || queueCount === 0}
+                className="button button--primary"
+                style={{ marginLeft: 'auto' }}
+              >
+                {syncing ? 'Syncing…' : 'Sync now'}
+              </button>
               <button onClick={signOut} className="button button--ghost">
                 Sign out
               </button>
@@ -149,16 +145,17 @@ export default function App() {
 
         <Suspense fallback={<LoadingSpinner />}>
           <Routes>
-            <Route path="/login" element={signedIn ? <Navigate to="/home" /> : <Login />} />
-            <Route path="/home" element={signedIn ? <Home /> : <Navigate to="/login" />} />
+            <Route path="/login" element={signedIn ? <Navigate to="/capture" /> : <Login />} />
+            <Route path="/home" element={signedIn ? <Navigate to="/capture" replace /> : <Navigate to="/login" />} />
             <Route path="/capture" element={signedIn ? <Capture /> : <Navigate to="/login" />} />
-            <Route path="/search" element={signedIn ? <Search /> : <Navigate to="/login" />} />
+            <Route path="/search" element={signedIn ? <Navigate to="/capture" replace /> : <Navigate to="/login" />} />
             <Route path="/board" element={signedIn ? <Board /> : <Navigate to="/login" />} />
             <Route path="/outline" element={signedIn ? <Outline /> : <Navigate to="/login" />} />
+            <Route path="/mindmap" element={signedIn ? <Mindmap /> : <Navigate to="/login" />} />
             <Route path="/review" element={signedIn ? <Review /> : <Navigate to="/login" />} />
             <Route path="/import" element={signedIn ? <Import /> : <Navigate to="/login" />} />
             <Route path="/node/:id" element={signedIn ? <NodeDetail /> : <Navigate to="/login" />} />
-            <Route path="*" element={<Navigate to={signedIn ? "/home" : "/login"} />} />
+            <Route path="*" element={<Navigate to={signedIn ? "/capture" : "/login"} />} />
           </Routes>
         </Suspense>
 
