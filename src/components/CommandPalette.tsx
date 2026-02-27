@@ -285,7 +285,7 @@ const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(fun
     },
     {
       id: 'go-review',
-      label: 'Go: Review',
+      label: 'Go: Inbox',
       kind: 'command',
       action: () => navigate('/review'),
     },
