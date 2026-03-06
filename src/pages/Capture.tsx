@@ -12,10 +12,23 @@ type SaveMessage = { tone: 'success' | 'offline' | 'error'; text: string }
 const INSTALL_DISMISS_KEY = 'mm_install_hint_dismissed'
 
 function splitInput(raw: string) {
-  const parts = raw.split(/\r?\n/)
-  const headline = parts[0] ?? ''
-  const body = parts.slice(1).join('\n').trim()
-  return { headline, body }
+  // If there's an explicit newline, use that as the split point
+  const newlineIndex = raw.search(/\r?\n/)
+  if (newlineIndex !== -1) {
+    const headline = raw.slice(0, newlineIndex)
+    const body = raw.slice(newlineIndex).replace(/^\r?\n/, '').trim()
+    return { headline, body }
+  }
+
+  // No newline - try smart splitting at sentence boundary
+  // Look for sentence endings (. ! ?) followed by a space
+  const sentenceEnd = raw.match(/^(.{20,}?[.!?])\s+(.+)$/s)
+  if (sentenceEnd) {
+    return { headline: sentenceEnd[1], body: sentenceEnd[2].trim() }
+  }
+
+  // No sentence boundary found - everything is headline
+  return { headline: raw, body: '' }
 }
 
 function extractTagsAndTitle(headline: string) {
